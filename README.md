@@ -31,7 +31,7 @@ import {
 
 const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
-// Define path policies once, share between both middleware.
+// Optional: Define path policies once, share between both middleware.
 const authPolicies: PathPolicy[] = [
   { pattern: /^\/api\/version$/, authenticate: false },
   { pattern: /^\/api\//, authenticate: true }
@@ -55,6 +55,14 @@ app.get("/api/me", (c) => {
   });
 });
 
+// 4. Handlers that are defined as non-authenticated still work
+app.get("/api/version", (c) => {
+  return c.json({
+    version: "1.0.0",
+    health: "ok"
+  });
+});
+
 export default app;
 ```
 
@@ -68,11 +76,11 @@ Simulates Cloudflare Access one-time-PIN authentication for local development.
 
 | Condition                                | Action                                         |
 | ---------------------------------------- | ---------------------------------------------- |
+| `CF_Authorization` cookie present        | Decode JWT, inject CF Access headers, continue |
 | `Cf-Access-Jwt-Assertion` header present | No-op (production)                             |
 | Path matches a **public** policy         | Pass through                                   |
 | `GET /_auth/login`                       | Serve HTML login form                          |
 | `POST /_auth/callback`                   | Validate email, sign JWT, set cookie, redirect |
-| `CF_Authorization` cookie present        | Decode JWT, inject CF Access headers, continue |
 | None of the above                        | Redirect to login form                         |
 
 **Settings — `DeveloperAuthSettings`**
@@ -169,7 +177,7 @@ Controls what `cloudflareAccess` does when no policy matches a request path:
 
 ### Production (behind Cloudflare Access)
 
-```
+```text
 Request ──► developerAuthentication
             │  Cf-Access-Jwt-Assertion header present?
             │  YES → no-op, call next()
@@ -184,7 +192,7 @@ Request ──► developerAuthentication
 
 ### Local Development
 
-```
+```text
 First request (no cookie):
 
 Request ──► developerAuthentication
