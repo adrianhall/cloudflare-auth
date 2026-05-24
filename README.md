@@ -13,9 +13,9 @@ This library provides two middleware functions that work together so your Hono h
 This package is installed directly from GitHub and is not published to npmjs. It expects your application to provide [`hono`](https://hono.dev/) as a peer dependency.
 
 ```bash
-npm install github:adrianhall/cloudflare-auth hono
+npm install github:adrianhall/cloudflare-auth#1.0.0 hono
 # or
-npm install github:adrianhall/cloudflare-auth hono
+yarn add github:adrianhall/cloudflare-auth#1.0.0 hono
 ```
 
 ## Quick Start
