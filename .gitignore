@@ -37,3 +37,7 @@ node_modules/
 # Tool caches
 .npm/
 .eslintcache
+
+# Playwright
+test-results/
+playwright-report/
