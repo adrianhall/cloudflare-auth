@@ -15,7 +15,7 @@ This package is installed directly from GitHub and is not published to npmjs. It
 ```bash
 npm install github:adrianhall/cloudflare-auth hono
 # or
-pnpm add github:adrianhall/cloudflare-auth hono
+npm install github:adrianhall/cloudflare-auth hono
 ```
 
 ## Quick Start
@@ -296,10 +296,10 @@ import {
 ## Development
 
 ```bash
-pnpm install
-pnpm run check
-pnpm run test:coverage
-pnpm run build
+npm install
+npm run check
+npm run test:coverage
+npm run build
 ```
 
 Build output in `dist/` is committed so GitHub installs can consume the package without rebuilding it. The Husky pre-commit hook runs formatting checks, type checks, ESLint, tests, and `build`, then stages the rebuilt `dist/` directory.
