@@ -46,11 +46,11 @@ export function renderLoginPage(callbackPath: string, redirectTo: string, error?
     input[type="email"]:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
     button{
       margin-top:1rem;width:100%;padding:.625rem;border:none;
-      border-radius:8px;background:#3b82f6;color:#fff;
+      border-radius:8px;background:#1d4ed8;color:#fff;
       font-size:1rem;font-weight:500;cursor:pointer;
       transition:background .15s;
     }
-    button:hover{background:#2563eb}
+    button:hover{background:#1e40af}
     .error{
       background:#fef2f2;color:#991b1b;border:1px solid #fecaca;
       padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.875rem;
