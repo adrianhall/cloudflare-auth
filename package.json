@@ -32,6 +32,7 @@
     "clean": "rimraf dist coverage",
     "check": "run-s check:prettier check:types check:eslint test:unit",
     "check:eslint": "eslint src tests *.config.{js,ts}",
+    "check:full": "run-s check test:a11y test:e2e",
     "check:prettier": "prettier --check .",
     "check:types": "tsc --noEmit",
     "format": "prettier --write .",
@@ -39,6 +40,7 @@
     "test:unit": "vitest run --project unit",
     "test:a11y": "vitest run --project a11y",
     "test:coverage": "vitest run --coverage --project unit",
+    "test:e2e": "playwright test",
     "prepare": "husky || true"
   },
   "dependencies": {
@@ -48,7 +50,10 @@
     "hono": "^4.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^9.39.4",
+    "@hono/node-server": "^2.0.4",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^25.6.0",
     "@vitest/coverage-istanbul": "^4.1.5",
     "axe-core": "^4.11.4",
