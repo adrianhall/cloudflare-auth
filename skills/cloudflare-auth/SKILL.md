@@ -116,11 +116,16 @@ Why: With `run_worker_first`, wrangler serves matching asset paths directly from
 **Correct (all requests flow through the Worker):**
 
 ```jsonc
-// wrangler.jsonc — add "binding": "ASSETS" so the Worker can fetch assets
+// wrangler.jsonc — add "binding": "ASSETS" so the Worker can fetch assets.
+// not_found_handling: "single-page-application" is required for SPAs: the ASSETS
+// binding returns 404 for paths with no matching file (e.g. /admin). Without
+// this, direct navigation to any client-side route returns 404 instead of
+// serving index.html for React Router to handle.
 {
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
   }
 }
 ```
