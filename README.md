@@ -13,10 +13,20 @@ This library provides two middleware functions that work together so your Hono h
 This package is installed directly from GitHub and is not published to npmjs. It expects your application to provide [`hono`](https://hono.dev/) as a peer dependency.
 
 ```bash
-npm install github:adrianhall/cloudflare-auth#1.0.0 hono
+npm install github:adrianhall/cloudflare-auth#1.0.1 hono
 # or
-yarn add github:adrianhall/cloudflare-auth#1.0.0 hono
+pnpm add github:adrianhall/cloudflare-auth#1.0.1 hono
 ```
+
+## AI Skill
+
+You can install an AI Agents Skill using the `npx skills add` command:
+
+```bash
+npx skills add adrianhall/cloudflare-auth
+```
+
+Load this skill whenever you are working with this library as it contains critical information to help your LLM to properly integrate the library.
 
 ## Quick Start
 
@@ -251,27 +261,84 @@ app.get("/api/profile", (c) => {
 | ------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `CLOUDFLARE_TEAM_DOMAIN` | Yes (production) | Your Cloudflare Access team domain (e.g. `myteam.cloudflareaccess.com`). Used to fetch the JWKS for JWT validation. |
 
-## Wrangler Configuration
-
-If your app uses Workers static assets with `run_worker_first`, add the auth routes so the worker handles login requests:
+**This must be set in your `wrangler.jsonc` vars.** `cloudflareAccess` reads
+`c.env.CLOUDFLARE_TEAM_DOMAIN` at request time. If it is missing or incorrect,
+all production Cloudflare Access JWTs will fail verification — the middleware
+falls back to HMAC (dev tokens only) and rejects the RS256-signed production
+token.
 
 ```jsonc
 {
-  "assets": {
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/_auth/*"]
+  "vars": {
+    "CLOUDFLARE_TEAM_DOMAIN": "myteam.cloudflareaccess.com"
   }
 }
 ```
 
+## Common Mistakes
+
+**Do not wrap middleware in arrow functions.** Coding LLMs sometimes generate:
+
+```ts
+// WRONG — creates a new middleware instance on every request
+app.use((c, next) => developerAuthentication({ policies })(c, next));
+```
+
+Register middleware directly instead:
+
+```ts
+// CORRECT
+app.use(developerAuthentication({ policies: authPolicies }));
+app.use(cloudflareAccess({ policies: authPolicies }));
+```
+
+If TypeScript reports a type mismatch with `MiddlewareHandler`, the likely
+cause is **two copies of hono** in `node_modules` (e.g. from `file:..` symlink
+during development). Fix the dependency, not the types.
+
+## Wrangler Configuration
+
+If your app serves a React SPA alongside a Hono API, you **must** use
+`run_worker_first: true` so that every request — including the initial
+page load — goes through the Worker. Without this, `developerAuthentication`
+never runs on page loads, the `CF_Authorization` cookie is never set, and
+API calls from the React app fail silently.
+
+```jsonc
+{
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  }
+}
+```
+
+The Worker serves static assets via a catch-all route:
+
+```ts
+// After all API routes — proxy unmatched GETs to the ASSETS binding
+app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
+```
+
+> **Do not use `serveStatic` from `hono/cloudflare-workers`** — it reads the
+> legacy Workers Sites KV (`__STATIC_CONTENT`) which is `undefined` with the
+> `assets.binding` system.
+
+> **Why not `run_worker_first: ["/api/*", "/_auth/*"]`?** Selective routing
+> only sends API calls through the Worker. The initial page load (`GET /`)
+> bypasses the Worker, so `developerAuthentication` never sets the cookie.
+> The React app's first `fetch()` to a protected endpoint gets a 302 redirect
+> that `fetch()` follows silently into login-page HTML.
+
 ## Cookie & Header Reference
 
-| Name                                 | Type   | Set by                             | Description                                     |
-| ------------------------------------ | ------ | ---------------------------------- | ----------------------------------------------- |
-| `CF_Authorization`                   | Cookie | Cloudflare Access / dev middleware | JWT token; `HttpOnly`, `Secure`, `SameSite=Lax` |
-| `Cf-Access-Jwt-Assertion`            | Header | Cloudflare Access / dev middleware | Same JWT as the cookie                          |
-| `Cf-Access-Authenticated-User-Email` | Header | Cloudflare Access / dev middleware | User's email address                            |
-| `Cf-Access-User`                     | Header | Cloudflare Access / dev middleware | Unique user identifier                          |
+| Name                                 | Type   | Set by                             | Description                                                                                                                            |
+| ------------------------------------ | ------ | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `CF_Authorization`                   | Cookie | Cloudflare Access / dev middleware | JWT token. HttpOnly in dev; not HttpOnly in production (CF Access).                                                                    |
+| `Cf-Access-Jwt-Assertion`            | Header | Cloudflare Access / dev middleware | Same JWT as the cookie                                                                                                                 |
+| `Cf-Access-Authenticated-User-Email` | Header | Cloudflare Access / dev middleware | User's email address                                                                                                                   |
+| `Cf-Access-User`                     | Header | Dev middleware only                | Unique user identifier. **Not set by Cloudflare Access** — the `sub` claim is extracted from the JWT by `cloudflareAccess` middleware. |
 
 ## Exported Utilities
 
@@ -292,6 +359,25 @@ import {
   USER_HEADER // "cf-access-user"
 } from "@adrianhall/cloudflare-auth";
 ```
+
+## Example App
+
+The [`example/`](https://github.com/adrianhall/cloudflare-auth/tree/main/example)
+directory contains a complete React + Hono diagnostic application that
+exercises every integration pattern: public and protected routes, the
+login flow, cookie handling, curl access with `signDevJwt()`, and
+production deployment behind Cloudflare Access.
+
+```bash
+cd example
+npm install
+npm run dev       # Vite dev server with HMR
+```
+
+The wrangler and middleware configuration recommendations in this README
+were determined empirically. The full experiment methodology and results
+are documented in
+[`example/docs/MANUAL_TESTS.md`](https://github.com/adrianhall/cloudflare-auth/tree/main/example/docs/MANUAL_TESTS.md).
 
 ## Development
 

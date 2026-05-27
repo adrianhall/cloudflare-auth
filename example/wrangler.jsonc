@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-auth-example",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-04-01",
+  "vars": {
+    "CLOUDFLARE_TEAM_DOMAIN": "example.cloudflareaccess.com"
+  },
+
+  // CONFIG-A
+  "assets": {
+    "binding": "ASSETS",
+    //"not_found_handling": "single-page-application",
+    "run_worker_first": true
+  }
+
+  // CONFIG-B
+  // "assets": {
+  //   "binding": "ASSETS",
+  //   "not_found_handling": "single-page-application",
+  //   "run_worker_first": ["/api/*", "/_auth/*"]
+  // },
+
+  // CONFIG-C
+  // "assets": {
+  //   "binding": "ASSETS",
+  //   "not_found_handling": "single-page-application"
+  // },
+
+  // CONFIG-D
+  // "assets": {
+  //   "not_found_handling": "single-page-application"
+  // },
+}

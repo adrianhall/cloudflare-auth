@@ -1,0 +1,37 @@
+{
+  "name": "cloudflare-auth-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "wrangler dev",
+    "typecheck": "tsc --noEmit",
+    "refresh-auth": "cd .. && npm pack --pack-destination example && cd example && npm install ./adrianhall-cloudflare-auth-*.tgz",
+    "preprovision": "terraform -chdir=infra init",
+    "provision": "terraform -chdir=infra apply -auto-approve",
+    "postprovision": "generate-wrangler -cf -i wrangler.prod.jsonc.tpl -o wrangler.prod.jsonc -t infra",
+    "deploy": "vite build && wrangler deploy --config wrangler.prod.jsonc",
+    "teardown": "terraform -chdir=infra destroy -auto-approve",
+    "postteardown": "shx rm -f wrangler.prod.jsonc"
+  },
+  "dependencies": {
+    "@adrianhall/cloudflare-auth": "github:adrianhall/cloudflare-auth#1.0.1",
+    "hono": "^4.7.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@adrianhall/cloudflare-scripts": "github:adrianhall/cloudflare-scripts#1.0.0",
+    "@cloudflare/vite-plugin": "^1.7.0",
+    "@cloudflare/workers-types": "^4.20250525.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "shx": "^0.4.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0",
+    "wrangler": "^4.20.0"
+  }
+}

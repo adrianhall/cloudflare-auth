@@ -1,0 +1,311 @@
+/* ── Reset & base ───────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #f8f9fa;
+  --surface: #ffffff;
+  --border: #dee2e6;
+  --text: #212529;
+  --text-muted: #6c757d;
+  --accent: #0d6efd;
+  --success: #198754;
+  --danger: #dc3545;
+  --warning: #ffc107;
+  --mono: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+}
+
+body {
+  margin: 0;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+code,
+pre {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+}
+
+/* ── Layout ─────────────────────────────────────────────────── */
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.app-header {
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+}
+
+.app-header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+
+.app-header p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.app-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* ── Section cards ──────────────────────────────────────────── */
+
+section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+section h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+}
+
+/* ── Auth status ────────────────────────────────────────────── */
+
+.auth-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.auth-badge.authenticated {
+  background: #d1e7dd;
+  color: var(--success);
+}
+
+.auth-badge.unauthenticated {
+  background: #f8d7da;
+  color: var(--danger);
+}
+
+.auth-detail {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.auth-detail code {
+  background: #e9ecef;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+
+button {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:hover {
+  background: #e9ecef;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.primary:hover {
+  background: #0b5ed7;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-group {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* ── Endpoint tester ────────────────────────────────────────── */
+
+.test-case {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.test-case-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--border);
+}
+
+.method-badge {
+  display: inline-block;
+  min-width: 3.5rem;
+  text-align: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.method-badge.get {
+  background: var(--success);
+}
+.method-badge.post {
+  background: var(--accent);
+}
+.method-badge.all {
+  background: var(--warning);
+  color: var(--text);
+}
+
+.test-path {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  flex: 1;
+}
+
+.test-auth {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+
+.test-auth.public {
+  background: #d1e7dd;
+  color: var(--success);
+}
+.test-auth.protected {
+  background: #f8d7da;
+  color: var(--danger);
+}
+
+.test-case-body {
+  padding: 0.75rem;
+}
+
+/* ── Response display ───────────────────────────────────────── */
+
+.response-display {
+  margin-top: 0.5rem;
+}
+
+.response-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.status-badge {
+  font-family: var(--mono);
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+
+.status-badge.ok {
+  background: #d1e7dd;
+  color: var(--success);
+}
+.status-badge.redirect {
+  background: #fff3cd;
+  color: #664d03;
+}
+.status-badge.error {
+  background: #f8d7da;
+  color: var(--danger);
+}
+
+.response-body {
+  margin-top: 0.5rem;
+}
+
+.response-body pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 0.75rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  user-select: none;
+}
+
+.collapsible-header:hover {
+  color: var(--text);
+}
+
+/* ── curl command ───────────────────────────────────────────── */
+
+.curl-block {
+  position: relative;
+  margin-top: 0.5rem;
+}
+
+.curl-block pre {
+  background: #2d2d2d;
+  color: #a9dc76;
+  padding: 0.75rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.copy-btn:hover {
+  opacity: 1;
+}

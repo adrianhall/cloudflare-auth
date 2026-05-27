@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.wrangler/
+*.tgz
+.vite/
+
+# Generated wrangler config — re-created from terraform outputs
+wrangler.prod.jsonc
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/*.tfstate
+infra/*.tfstate.backup
