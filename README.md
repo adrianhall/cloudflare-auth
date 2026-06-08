@@ -365,24 +365,32 @@ app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 | `Cf-Access-Authenticated-User-Email` | Header | Cloudflare Access / dev middleware | User's email address                                                                                                                   |
 | `Cf-Access-User`                     | Header | Dev middleware only                | Unique user identifier. **Not set by Cloudflare Access** — the `sub` claim is extracted from the JWT by `cloudflareAccess` middleware. |
 
-## Exported Utilities
+## Testing Utilities
 
-For advanced use-cases and testing, the library also exports lower-level helpers:
+The `@adrianhall/cloudflare-auth/testing` subpath exports helpers for
+writing integration and E2E tests without going through the login flow:
 
 ```ts
 import {
-  matchPolicy, // Evaluate a pathname against a policy array
-  signDevJwt, // Create a dev-signed JWT
-  verifyDevJwt, // Verify a dev-signed JWT
-  verifyAccessJwt, // Verify against CF Access JWKS
-  parseCookie, // Extract CF_Authorization from Cookie header
+  signDevJwt, // Create a dev-signed JWT for any email
   buildCookieHeader, // Build a Set-Cookie header value
-  DEFAULT_DEV_SECRET, // The well-known dev signing key
-  COOKIE_NAME, // "CF_Authorization"
+  clearCookieHeader, // Build a Set-Cookie that clears the cookie
   JWT_HEADER, // "cf-access-jwt-assertion"
-  EMAIL_HEADER, // "cf-access-authenticated-user-email"
-  USER_HEADER // "cf-access-user"
-} from "@adrianhall/cloudflare-auth";
+  COOKIE_NAME // "CF_Authorization"
+} from "@adrianhall/cloudflare-auth/testing";
+```
+
+Use `signDevJwt()` to mint tokens and inject them via the
+`Cf-Access-Jwt-Assertion` header in Vitest or Playwright tests:
+
+```ts
+const token = await signDevJwt("alice@example.com");
+const res = await app.fetch(
+  new Request("http://localhost/api/me", {
+    headers: { [JWT_HEADER]: token }
+  }),
+  env
+);
 ```
 
 ## Example App

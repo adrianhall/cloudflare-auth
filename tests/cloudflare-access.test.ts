@@ -1,13 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
-import {
-  cloudflareAccess,
-  signDevJwt,
-  JWT_HEADER,
-  COOKIE_NAME,
-  type AuthVariables,
-  type Logger
-} from "../src/index.js";
+import { cloudflareAccess, type AuthVariables, type Logger } from "../src/index.js";
+import { signDevJwt, JWT_HEADER, COOKIE_NAME } from "../src/jwt.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

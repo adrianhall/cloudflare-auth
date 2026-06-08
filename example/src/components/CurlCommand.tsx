@@ -24,7 +24,7 @@ function buildCurl(origin: string, method: string, path: string, body?: unknown)
   // Show how to add auth
   parts.push(`\n  # To authenticate, add:\n  # -H 'cf-access-jwt-assertion: <TOKEN>'`);
   parts.push(
-    `  # Generate a token with:\n  # node -e "import('@adrianhall/cloudflare-auth').then(m=>m.signDevJwt('you@example.com')).then(console.log)"`
+    `  # Generate a token with:\n  # node -e "import('@adrianhall/cloudflare-auth/testing').then(m=>m.signDevJwt('you@example.com')).then(console.log)"`
   );
 
   return parts.join(" \\\n  ");

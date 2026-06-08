@@ -29,6 +29,4 @@
 export { developerAuthentication } from "./developer-authentication.js";
 export { cloudflareAccess } from "./cloudflare-access.js";
 export type { AuthVariables, DeveloperAuthSettings, CloudflareAccessSettings, PathPolicy, PolicyMatch, Logger } from "./types.js";
-export { matchPolicy } from "./policy.js";
-export { signDevJwt, verifyDevJwt, verifyAccessJwt, parseCookie, buildCookieHeader, clearCookieHeader, DEFAULT_DEV_SECRET, COOKIE_NAME, JWT_HEADER, EMAIL_HEADER, USER_HEADER } from "./jwt.js";
 //# sourceMappingURL=index.d.ts.map
