@@ -36,9 +36,9 @@ Without this library, developers either skip auth entirely in dev (risky) or run
 This package is **not published to npm**. Install directly from GitHub (`dist/` is committed):
 
 ```bash
-npm install github:adrianhall/cloudflare-auth#1.0.1 hono
+npm install github:adrianhall/cloudflare-auth#1.1.0 hono
 # or
-pnpm add github:adrianhall/cloudflare-auth#1.0.1 hono
+pnpm add github:adrianhall/cloudflare-auth#1.1.0 hono
 ```
 
 Peer dependency: `hono ^4.0.0`
