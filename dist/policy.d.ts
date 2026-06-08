@@ -3,13 +3,16 @@
  *
  * @module
  */
-import type { PathPolicy } from "./types.js";
+import type { PathPolicy, PolicyMatch } from "./types.js";
 /**
  * Evaluate a request pathname against an ordered list of policies.
  *
- * Returns the `authenticate` value of the **first matching** policy, or
+ * Returns a {@link PolicyMatch} for the **first matching** policy, or
  * `undefined` when no policy matches (the caller decides what to do in
  * that case).
+ *
+ * The `redirect` field defaults to `true` when the matching
+ * {@link PathPolicy} does not specify one.
  */
-export declare function matchPolicy(pathname: string, policies: PathPolicy[]): boolean | undefined;
+export declare function matchPolicy(pathname: string, policies: PathPolicy[]): PolicyMatch | undefined;
 //# sourceMappingURL=policy.d.ts.map

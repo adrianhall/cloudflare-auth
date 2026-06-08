@@ -67,6 +67,37 @@ export interface PathPolicy {
    * `false` - the matching path is public / anonymous.
    */
   authenticate: boolean;
+  /**
+   * Controls the response when an unauthenticated request hits this
+   * path in {@link developerAuthentication}:
+   *
+   * - `true` *(default)* — 302 redirect to the login form.  Appropriate
+   *   for page routes where the browser should navigate to a login UI.
+   * - `false` — 401 JSON `{ error: "Authentication required" }`.
+   *   Appropriate for API routes, matching what {@link cloudflareAccess}
+   *   does in production.
+   *
+   * {@link cloudflareAccess} always returns 401 regardless of this
+   * setting.
+   *
+   * Only meaningful when `authenticate` is `true`.
+   */
+  redirect?: boolean;
+}
+
+/**
+ * Result of evaluating a request pathname against a {@link PathPolicy}
+ * array via {@link matchPolicy}.
+ */
+export interface PolicyMatch {
+  /** Whether the matching policy requires authentication. */
+  authenticate: boolean;
+  /**
+   * Whether the middleware should redirect (`true`) or return 401
+   * (`false`) for unauthenticated requests.  Defaults to `true` when
+   * the original {@link PathPolicy} did not specify a value.
+   */
+  redirect: boolean;
 }
 
 // ---------------------------------------------------------------------------

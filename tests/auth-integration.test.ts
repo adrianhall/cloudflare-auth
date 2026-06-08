@@ -152,4 +152,67 @@ describe("auth integration (both middleware together)", () => {
     const secretRes = await app.fetch(new Request(`${BASE}/api/secret`), MOCK_ENV);
     expect(secretRes.status).toBe(302);
   });
+
+  // -----------------------------------------------------------------------
+  // redirect option (API routes return 401 instead of 302)
+  // -----------------------------------------------------------------------
+
+  describe("redirect option (both middleware)", () => {
+    /** Mixed policies: API routes use redirect:false, page routes use default. */
+    const mixedPolicies: PathPolicy[] = [
+      { pattern: /^\/api\/version$/, authenticate: false },
+      { pattern: /^\/api\//, authenticate: true, redirect: false },
+      { pattern: /^\/dashboard/, authenticate: true }
+    ];
+
+    function createMixedApp() {
+      const app = new Hono<{ Bindings: typeof MOCK_ENV; Variables: AuthVariables }>();
+
+      app.use(developerAuthentication({ policies: mixedPolicies, logger: silentLogger }));
+      app.use(cloudflareAccess({ policies: mixedPolicies, logger: silentLogger }));
+
+      app.get("/api/version", (c) => c.json({ version: "1.0" }));
+      app.get("/api/me", (c) => c.json({ email: c.get("userEmail"), sub: c.get("userSub") }));
+      app.get("/dashboard", (c) => c.json({ email: c.get("userEmail"), sub: c.get("userSub") }));
+
+      return app;
+    }
+
+    it("returns 401 for unauthenticated API route (redirect: false)", async () => {
+      const app = createMixedApp();
+      const res = await fetchWithEnv(app, `${BASE}/api/me`);
+
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("Authentication required");
+    });
+
+    it("returns 302 for unauthenticated page route (redirect: true default)", async () => {
+      const app = createMixedApp();
+      const res = await fetchWithEnv(app, `${BASE}/dashboard`);
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toContain("/_auth/login");
+    });
+
+    it("allows anonymous access to public endpoints regardless of redirect", async () => {
+      const app = createMixedApp();
+      const res = await fetchWithEnv(app, `${BASE}/api/version`);
+
+      expect(res.status).toBe(200);
+    });
+
+    it("returns authenticated response for API route with valid token", async () => {
+      const app = createMixedApp();
+      const token = await signDevJwt("api-user@example.com");
+
+      const res = await fetchWithEnv(app, `${BASE}/api/me`, {
+        headers: { [JWT_HEADER]: token }
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { email: string; sub: string };
+      expect(body.email).toBe("api-user@example.com");
+    });
+  });
 });

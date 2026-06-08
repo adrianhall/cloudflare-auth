@@ -209,6 +209,50 @@ describe("cloudflareAccess middleware", () => {
   });
 
   // -----------------------------------------------------------------------
+  // Policies with redirect option (ignored by cloudflareAccess)
+  // -----------------------------------------------------------------------
+
+  describe("redirect option on policies (ignored)", () => {
+    it("returns 401 for unauthenticated API route regardless of redirect: false", async () => {
+      const app = createApp({
+        policies: [{ pattern: /^\/api\//, authenticate: true, redirect: false }]
+      });
+
+      const res = await fetchWithEnv(app, `${BASE}/api/test`);
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("Authentication required");
+    });
+
+    it("bypasses auth for public path with redirect: false", async () => {
+      const app = createApp({
+        policies: [
+          { pattern: /^\/public$/, authenticate: false, redirect: false },
+          { pattern: /^\/api\//, authenticate: true }
+        ]
+      });
+
+      const res = await fetchWithEnv(app, `${BASE}/public`);
+      expect(res.status).toBe(200);
+    });
+
+    it("sets context variables for authenticated request with redirect: false", async () => {
+      const token = await signDevJwt("alice@example.com");
+      const app = createApp({
+        policies: [{ pattern: /^\/api\//, authenticate: true, redirect: false }]
+      });
+
+      const res = await fetchWithEnv(app, `${BASE}/api/test`, {
+        headers: { [JWT_HEADER]: token }
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { email: string; sub: string };
+      expect(body.email).toBe("alice@example.com");
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // defaultAction: bypass
   // -----------------------------------------------------------------------
 
