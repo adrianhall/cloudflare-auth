@@ -40,21 +40,3 @@ export type {
   PolicyMatch,
   Logger
 } from "./types.js";
-
-// Policy evaluation
-export { matchPolicy } from "./policy.js";
-
-// JWT utilities (exported for advanced use-cases and testing)
-export {
-  signDevJwt,
-  verifyDevJwt,
-  verifyAccessJwt,
-  parseCookie,
-  buildCookieHeader,
-  clearCookieHeader,
-  DEFAULT_DEV_SECRET,
-  COOKIE_NAME,
-  JWT_HEADER,
-  EMAIL_HEADER,
-  USER_HEADER
-} from "./jwt.js";

@@ -76,13 +76,13 @@ single most important observation for most experiments.
 ### 5. Generating JWT tokens for curl
 
 ```bash
-node -e "import('@adrianhall/cloudflare-auth').then(m=>m.signDevJwt('test@example.com')).then(console.log)"
+node -e "import('@adrianhall/cloudflare-auth/testing').then(m=>m.signDevJwt('test@example.com')).then(console.log)"
 ```
 
 Save the output to a shell variable for convenience:
 
 ```bash
-TOKEN=$(node -e "import('@adrianhall/cloudflare-auth').then(m=>m.signDevJwt('test@example.com')).then(console.log)")
+TOKEN=$(node -e "import('@adrianhall/cloudflare-auth/testing').then(m=>m.signDevJwt('test@example.com')).then(console.log)")
 ```
 
 ---
@@ -461,7 +461,7 @@ This is the primary interaction model for non-browser API consumers.
 Generate a token first:
 
 ```bash
-TOKEN=$(node -e "import('@adrianhall/cloudflare-auth').then(m=>m.signDevJwt('curl-user@example.com')).then(console.log)")
+TOKEN=$(node -e "import('@adrianhall/cloudflare-auth/testing').then(m=>m.signDevJwt('curl-user@example.com')).then(console.log)")
 echo $TOKEN
 ```
 
@@ -515,7 +515,7 @@ Check the `auth` and `cookies` fields in the response.
 
 ```text
 > sh -x docs/experiment5.sh
-++ node -e 'import('\''@adrianhall/cloudflare-auth'\'').then(m=>m.signDevJwt('\''curl-user@example.com'\'')).then(console.log)'
+++ node -e 'import('\''@adrianhall/cloudflare-auth/testing'\'').then(m=>m.signDevJwt('\''curl-user@example.com'\'')).then(console.log)'
 + TOKEN=eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImN1cmwtdXNlckBleGFtcGxlLmNvbSIsInN1YiI6ImRldi1jdXJsLXVzZXJAZXhhbXBsZS5jb20iLCJ0eXBlIjoiZGV2IiwiaXNzIjoiZGV2LWF1dGhlbnRpY2F0aW9uIiwiaWF0IjoxNzc5ODEzNjIyLCJleHAiOjE3Nzk5MDAwMjJ9.O0u7eCzW10O-SNc9DTWdaj1vVkAajo6VZv2KpMcnwVY
 + echo eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImN1cmwtdXNlckBleGFtcGxlLmNvbSIsInN1YiI6ImRldi1jdXJsLXVzZXJAZXhhbXBsZS5jb20iLCJ0eXBlIjoiZGV2IiwiaXNzIjoiZGV2LWF1dGhlbnRpY2F0aW9uIiwiaWF0IjoxNzc5ODEzNjIyLCJleHAiOjE3Nzk5MDAwMjJ9.O0u7eCzW10O-SNc9DTWdaj1vVkAajo6VZv2KpMcnwVY
 eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImN1cmwtdXNlckBleGFtcGxlLmNvbSIsInN1YiI6ImRldi1jdXJsLXVzZXJAZXhhbXBsZS5jb20iLCJ0eXBlIjoiZGV2IiwiaXNzIjoiZGV2LWF1dGhlbnRpY2F0aW9uIiwiaWF0IjoxNzc5ODEzNjIyLCJleHAiOjE3Nzk5MDAwMjJ9.O0u7eCzW10O-SNc9DTWdaj1vVkAajo6VZv2KpMcnwVY
@@ -979,7 +979,7 @@ Completed based on Experiments 1–8.
 
 ```bash
 # Generate a token:
-TOKEN=$(node -e "import('@adrianhall/cloudflare-auth').then(m=>m.signDevJwt('test@example.com')).then(console.log)")
+TOKEN=$(node -e "import('@adrianhall/cloudflare-auth/testing').then(m=>m.signDevJwt('test@example.com')).then(console.log)")
 
 # Public endpoint (no auth needed):
 curl -s http://localhost:5173/api/version | jq .

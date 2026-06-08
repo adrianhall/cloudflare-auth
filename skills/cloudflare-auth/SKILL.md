@@ -500,7 +500,7 @@ const res = await app.fetch(
 Use the exported `JWT_HEADER` constant instead of a raw string to stay in sync with the library:
 
 ```ts
-import { signDevJwt, JWT_HEADER } from "@adrianhall/cloudflare-auth";
+import { signDevJwt, JWT_HEADER } from "@adrianhall/cloudflare-auth/testing";
 
 const res = await app.fetch(
   new Request("http://localhost/api/me", {
@@ -518,11 +518,10 @@ import { Hono } from "hono";
 import {
   developerAuthentication,
   cloudflareAccess,
-  signDevJwt,
-  JWT_HEADER,
   type AuthVariables,
   type PathPolicy
 } from "@adrianhall/cloudflare-auth";
+import { signDevJwt, JWT_HEADER } from "@adrianhall/cloudflare-auth/testing";
 
 const MOCK_ENV = { CLOUDFLARE_TEAM_DOMAIN: "test.cloudflareaccess.com" };
 
@@ -609,7 +608,7 @@ For browser-level tests, inject the token as an extra HTTP header on the Playwri
 
 ```ts
 import { test, expect } from "@playwright/test";
-import { signDevJwt, JWT_HEADER } from "@adrianhall/cloudflare-auth";
+import { signDevJwt, JWT_HEADER } from "@adrianhall/cloudflare-auth/testing";
 
 test("authenticated dashboard loads", async ({ browser }) => {
   const token = await signDevJwt("alice@example.com");
@@ -686,23 +685,20 @@ app.use(cloudflareAccess({ policies, devSecret: TEST_SECRET }));
 
 ---
 
-## Exported Low-Level Utilities
+## Testing Utilities (`@adrianhall/cloudflare-auth/testing`)
 
-Available for testing, custom middleware, or advanced flows:
+Available for integration tests, E2E tests, and advanced flows:
 
 ```ts
 import {
-  matchPolicy, // Evaluate a pathname against a PathPolicy[]
   signDevJwt, // Sign a dev JWT (email, options)
-  verifyDevJwt, // Verify a dev JWT; returns VerifiedToken | null
-  verifyAccessJwt, // Verify against CF Access JWKS; returns VerifiedToken | null
-  parseCookie, // Extract CF_Authorization value from a Cookie header string
   buildCookieHeader, // Build a Set-Cookie header value for a JWT
   clearCookieHeader, // Build a Set-Cookie header that clears the cookie
-  DEFAULT_DEV_SECRET, // Well-known dev HMAC key (never use in production)
-  COOKIE_NAME, // "CF_Authorization"
   JWT_HEADER, // "cf-access-jwt-assertion"
-  EMAIL_HEADER, // "cf-access-authenticated-user-email"
-  USER_HEADER // "cf-access-user"
-} from "@adrianhall/cloudflare-auth";
+  COOKIE_NAME // "CF_Authorization"
+} from "@adrianhall/cloudflare-auth/testing";
 ```
+
+All other internal utilities (`matchPolicy`, `verifyDevJwt`,
+`verifyAccessJwt`, `parseCookie`, `DEFAULT_DEV_SECRET`, `EMAIL_HEADER`,
+`USER_HEADER`) are not part of the public API.

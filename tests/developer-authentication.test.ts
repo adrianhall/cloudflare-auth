@@ -1,16 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
+import { developerAuthentication, type AuthVariables, type Logger } from "../src/index.js";
 import {
-  developerAuthentication,
   signDevJwt,
   buildCookieHeader,
   JWT_HEADER,
   EMAIL_HEADER,
   USER_HEADER,
-  COOKIE_NAME,
-  type AuthVariables,
-  type Logger
-} from "../src/index.js";
+  COOKIE_NAME
+} from "../src/jwt.js";
 import { handleCallback, forwardWithHeaders, defaultTo } from "../src/developer-authentication.js";
 
 // ---------------------------------------------------------------------------

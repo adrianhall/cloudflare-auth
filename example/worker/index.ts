@@ -10,15 +10,44 @@ import { Hono } from "hono";
 import {
   developerAuthentication,
   cloudflareAccess,
-  parseCookie,
-  verifyDevJwt,
-  JWT_HEADER,
-  EMAIL_HEADER,
-  USER_HEADER,
-  COOKIE_NAME,
   type AuthVariables,
   type PathPolicy
 } from "@adrianhall/cloudflare-auth";
+import { JWT_HEADER, COOKIE_NAME } from "@adrianhall/cloudflare-auth/testing";
+import { jwtVerify } from "jose";
+
+// ---------------------------------------------------------------------------
+// Constants & helpers inlined from the library's internal API.
+// These are Cloudflare's well-known header names and simple cookie parsing.
+// ---------------------------------------------------------------------------
+
+const EMAIL_HEADER = "cf-access-authenticated-user-email";
+const USER_HEADER = "cf-access-user";
+const DEFAULT_DEV_SECRET = "cloudflare-access-dev-secret-do-not-use-in-production";
+
+/** Extract the CF_Authorization cookie value from a Cookie header string. */
+function parseCookie(header: string | null | undefined): string | undefined {
+  if (!header) return undefined;
+  const prefix = `${COOKIE_NAME}=`;
+  const entry = header.split(";").find((s) => s.trim().startsWith(prefix));
+  return entry ? entry.trim().slice(prefix.length) : undefined;
+}
+
+/** Verify a dev-signed JWT, returning email + sub or null. */
+async function verifyDevJwt(token: string): Promise<{ email: string; sub: string } | null> {
+  try {
+    const secret = new TextEncoder().encode(DEFAULT_DEV_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+    const email = payload.email as string | undefined;
+    const sub = payload.sub as string | undefined;
+    if (typeof email === "string" && email && typeof sub === "string" && sub) {
+      return { email, sub };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 import { createVerboseLogger } from "./verbose-logger.js";
 
 // ---------------------------------------------------------------------------

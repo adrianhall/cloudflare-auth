@@ -3,13 +3,11 @@ import { Hono } from "hono";
 import {
   developerAuthentication,
   cloudflareAccess,
-  signDevJwt,
-  COOKIE_NAME,
-  JWT_HEADER,
   type AuthVariables,
   type PathPolicy,
   type Logger
 } from "../src/index.js";
+import { signDevJwt, COOKIE_NAME, JWT_HEADER } from "../src/jwt.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

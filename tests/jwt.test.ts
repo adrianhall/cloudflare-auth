@@ -7,10 +7,10 @@ import {
   parseCookie,
   buildCookieHeader,
   clearCookieHeader,
+  extractClaims,
   DEFAULT_DEV_SECRET,
   COOKIE_NAME
-} from "../src/index.js";
-import { extractClaims } from "../src/jwt.js";
+} from "../src/jwt.js";
 
 // Mock only getRemoteJwks so we can supply a local key set instead of
 // hitting a real Cloudflare Access certs endpoint.  The rest of the
