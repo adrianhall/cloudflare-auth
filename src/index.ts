@@ -37,6 +37,7 @@ export type {
   DeveloperAuthSettings,
   CloudflareAccessSettings,
   PathPolicy,
+  PolicyMatch,
   Logger
 } from "./types.js";
 

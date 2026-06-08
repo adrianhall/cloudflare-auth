@@ -53,7 +53,7 @@ export function cloudflareAccess(settings) {
         // 1.  Evaluate path policies.
         // -----------------------------------------------------------------
         const policyMatch = policies ? matchPolicy(pathname, policies) : undefined;
-        if (policyMatch === false) {
+        if (policyMatch?.authenticate === false) {
             // Explicitly public — skip JWT validation entirely.
             log.debug("Path is public – bypassing auth", { pathname });
             return next();
@@ -62,7 +62,8 @@ export function cloudflareAccess(settings) {
         //   - Explicit `true` from a policy  → required.
         //   - No matching policy + block      → required.
         //   - No matching policy + bypass     → optional (best-effort).
-        const authRequired = policyMatch === true || (policyMatch === undefined && defaultAction === "block");
+        const authRequired = policyMatch?.authenticate === true
+            || (policyMatch === undefined && defaultAction === "block");
         // -----------------------------------------------------------------
         // 2.  Extract the token.
         // -----------------------------------------------------------------

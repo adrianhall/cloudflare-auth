@@ -84,14 +84,15 @@ Simulates Cloudflare Access one-time-PIN authentication for local development.
 
 **Behaviour per request:**
 
-| Condition                                | Action                                         |
-| ---------------------------------------- | ---------------------------------------------- |
-| `CF_Authorization` cookie present        | Decode JWT, inject CF Access headers, continue |
-| `Cf-Access-Jwt-Assertion` header present | No-op (production)                             |
-| Path matches a **public** policy         | Pass through                                   |
-| `GET /_auth/login`                       | Serve HTML login form                          |
-| `POST /_auth/callback`                   | Validate email, sign JWT, set cookie, redirect |
-| None of the above                        | Redirect to login form                         |
+| Condition                                | Action                                                         |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `Cf-Access-Jwt-Assertion` header present | No-op (production)                                             |
+| Path matches a **public** policy         | Pass through                                                   |
+| `GET /_auth/login`                       | Serve HTML login form                                          |
+| `POST /_auth/callback`                   | Validate email, sign JWT, set cookie, redirect                 |
+| `CF_Authorization` cookie present        | Decode JWT, inject CF Access headers, continue                 |
+| None of the above (`redirect: true`)     | 302 redirect to login form _(default, page routes)_            |
+| None of the above (`redirect: false`)    | 401 JSON `{ error: "Authentication required" }` _(API routes)_ |
 
 **Settings — `DeveloperAuthSettings`**
 
@@ -155,8 +156,11 @@ const authPolicies: PathPolicy[] = [
   { pattern: /^\/api\/version$/, authenticate: false },
   { pattern: /^\/api\/health$/, authenticate: false },
 
-  // Everything else under /api requires auth
-  { pattern: /^\/api\//, authenticate: true }
+  // API routes: require auth, return 401 when unauthenticated (not redirect)
+  { pattern: /^\/api\//, authenticate: true, redirect: false },
+
+  // Page routes: require auth, redirect to login form (default)
+  { pattern: /^\/dashboard/, authenticate: true }
 ];
 
 app.use(developerAuthentication({ policies: authPolicies }));
@@ -169,8 +173,16 @@ app.use(cloudflareAccess({ policies: authPolicies }));
 interface PathPolicy {
   pattern: RegExp; // Tested against the request pathname
   authenticate: boolean; // true = require auth, false = public
+  redirect?: boolean; // true (default) = 302 to login, false = 401 JSON
 }
 ```
+
+The `redirect` property controls how `developerAuthentication` responds
+to unauthenticated requests. When `redirect` is `false`, the middleware
+returns `401 JSON` instead of redirecting to the login form -- this is
+appropriate for API routes where the client expects a JSON error, and
+aligns local development behaviour with production (`cloudflareAccess`
+always returns 401). `cloudflareAccess` ignores this property.
 
 ### `defaultAction`
 
@@ -200,21 +212,21 @@ Request ──► developerAuthentication
             Your handler
 ```
 
-### Local Development
+### Local Development (page routes — `redirect: true`, the default)
 
 ```text
 First request (no cookie):
 
 Request ──► developerAuthentication
             │  No CF headers, no cookie
-            │  302 Redirect → /_auth/login?redirect=/api/game
+            │  302 Redirect → /_auth/login?redirect=/dashboard
             ▼
 GET /_auth/login
             │  Serve HTML login form
             ▼
 POST /_auth/callback  (email=dev@example.com)
             │  Generate dev JWT, set CF_Authorization cookie
-            │  302 Redirect → /api/game
+            │  302 Redirect → /dashboard
             ▼
 Subsequent requests (cookie present):
 
@@ -229,6 +241,19 @@ Request ──► developerAuthentication
             ▼
             Your handler
 ```
+
+### Local Development (API routes — `redirect: false`)
+
+```text
+Request ──► developerAuthentication
+            │  No CF headers, no cookie
+            │  Policy has redirect: false
+            │  401 JSON { error: "Authentication required" }
+```
+
+This matches production behaviour where `cloudflareAccess` returns 401
+for API routes, so API clients see the same response in both
+environments.
 
 ## Hono Type Integration
 

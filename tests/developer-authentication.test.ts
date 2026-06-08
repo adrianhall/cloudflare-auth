@@ -262,6 +262,118 @@ describe("developerAuthentication middleware", () => {
   });
 
   // -----------------------------------------------------------------------
+  // redirect option on PathPolicy
+  // -----------------------------------------------------------------------
+
+  describe("redirect option", () => {
+    /** Policies mixing page routes (redirect) and API routes (no redirect). */
+    const mixedPolicies = [
+      { pattern: /^\/public$/, authenticate: false },
+      { pattern: /^\/api\//, authenticate: true, redirect: false },
+      { pattern: /^\/dashboard/, authenticate: true, redirect: true }
+    ];
+
+    it("returns 401 JSON when redirect is false and no auth is present", async () => {
+      const app = createApp({ policies: mixedPolicies });
+      const res = await app.request(`${BASE}/api/test`);
+
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("Authentication required");
+    });
+
+    it("returns 302 redirect when redirect is true (explicit)", async () => {
+      const app = createApp({ policies: mixedPolicies });
+      const res = await app.request(`${BASE}/dashboard`);
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toContain("/_auth/login");
+    });
+
+    it("returns 302 redirect when redirect is not set (default)", async () => {
+      const app = createApp({
+        policies: [{ pattern: /^\/api\//, authenticate: true }]
+      });
+      const res = await app.request(`${BASE}/api/test`);
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toContain("/_auth/login");
+    });
+
+    it("returns 401 JSON and clears cookie when redirect is false and cookie is invalid", async () => {
+      const app = createApp({ policies: mixedPolicies });
+
+      const res = await app.request(`${BASE}/api/test`, {
+        headers: { Cookie: `${COOKIE_NAME}=not-a-jwt` }
+      });
+
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("Authentication required");
+
+      const setCookie = res.headers.get("set-cookie") ?? "";
+      expect(setCookie).toContain("Max-Age=0");
+    });
+
+    it("returns 401 JSON and clears cookie when redirect is false and cookie is expired", async () => {
+      const token = await signDevJwt("expired@example.com", { lifetime: -1 });
+      const app = createApp({ policies: mixedPolicies });
+
+      const res = await app.request(`${BASE}/api/test`, {
+        headers: { Cookie: `${COOKIE_NAME}=${token}` }
+      });
+
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("Authentication required");
+
+      const setCookie = res.headers.get("set-cookie") ?? "";
+      expect(setCookie).toContain("Max-Age=0");
+    });
+
+    it("still proceeds normally with a valid cookie when redirect is false", async () => {
+      const token = await signDevJwt("api-user@example.com");
+      const app = createApp({ policies: mixedPolicies });
+
+      const res = await app.request(`${BASE}/api/test`, {
+        headers: { Cookie: buildCookieHeader(token, false) }
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, string | null>;
+      expect(body.emailHeader).toBe("api-user@example.com");
+    });
+
+    it("still passes through with CF Access header when redirect is false", async () => {
+      const app = createApp({ policies: mixedPolicies });
+      const res = await app.request(`${BASE}/api/test`, {
+        headers: { [JWT_HEADER]: "real-token" }
+      });
+
+      expect(res.status).toBe(200);
+    });
+
+    it("public paths are unaffected by redirect setting on other policies", async () => {
+      const app = createApp({ policies: mixedPolicies });
+      const res = await app.request(`${BASE}/public`);
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("public");
+    });
+
+    it("defaults to redirect when no policy matches", async () => {
+      const app = createApp({
+        policies: [{ pattern: /^\/known$/, authenticate: true, redirect: false }]
+      });
+
+      // /api/test does not match any policy → default requires auth with redirect.
+      const res = await app.request(`${BASE}/api/test`);
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toContain("/_auth/login");
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // handleCallback – error paths
   // -----------------------------------------------------------------------
 

@@ -79,7 +79,8 @@ export function developerAuthentication(settings?: DeveloperAuthSettings): Middl
     // -----------------------------------------------------------------
     // 2.  Path is public according to policies  →  pass through.
     // -----------------------------------------------------------------
-    if (policies && matchPolicy(pathname, policies) === false) {
+    const policyMatch = policies ? matchPolicy(pathname, policies) : undefined;
+    if (policyMatch?.authenticate === false) {
       log.info("Path is public – skipping auth", { pathname });
       return next();
     }
@@ -100,10 +101,17 @@ export function developerAuthentication(settings?: DeveloperAuthSettings): Middl
       return handleCallback(c, { loginPath, devSecret, tokenLifetime, logger: log });
     }
 
+    // When a matching policy sets `redirect: false`, the middleware
+    // returns 401 JSON instead of redirecting to the login form.  This
+    // aligns local-dev behaviour with production for API routes.
+    // When no policy matched, default to redirect (current behaviour).
+    const shouldRedirect = policyMatch?.redirect ?? true;
+
     // -----------------------------------------------------------------
     // 5.  Cookie present  →  verify, then inject headers and continue.
     //     If the token is expired or invalid, clear the stale cookie
-    //     and redirect to the login page so the user can re-authenticate.
+    //     and either redirect to the login page or return 401 depending
+    //     on the policy's redirect setting.
     // -----------------------------------------------------------------
     const token = parseCookie(c.req.header("cookie"));
     if (token) {
@@ -112,15 +120,23 @@ export function developerAuthentication(settings?: DeveloperAuthSettings): Middl
         return forwardWithHeaders(c, token, next, log);
       }
 
-      log.info("Cookie token invalid or expired – clearing cookie and redirecting to login");
       c.header("Set-Cookie", clearCookieHeader());
+      if (!shouldRedirect) {
+        log.info("Cookie token invalid or expired – returning 401", { pathname });
+        return c.json({ error: "Authentication required" }, 401);
+      }
+      log.info("Cookie token invalid or expired – clearing cookie and redirecting to login");
       const loginRedirect = `${loginPath}?redirect=${encodeURIComponent(pathname)}`;
       return c.redirect(loginRedirect, 302);
     }
 
     // -----------------------------------------------------------------
-    // 6.  No auth at all  →  redirect to login.
+    // 6.  No auth at all  →  redirect to login or return 401.
     // -----------------------------------------------------------------
+    if (!shouldRedirect) {
+      log.info("No auth found – returning 401", { pathname });
+      return c.json({ error: "Authentication required" }, 401);
+    }
     const redirectTarget = `${loginPath}?redirect=${encodeURIComponent(pathname)}`;
     log.info("No auth found – redirecting to login", { redirectTarget });
     return c.redirect(redirectTarget, 302);

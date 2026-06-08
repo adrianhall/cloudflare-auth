@@ -85,12 +85,18 @@ Define `PathPolicy[]` **once** and pass the identical array to **both** middlewa
 ```ts
 const authPolicies: PathPolicy[] = [
   { pattern: /^\/api\/version$/, authenticate: false },
-  { pattern: /^\/api\//, authenticate: true }
+  { pattern: /^\/api\//, authenticate: true, redirect: false }, // API: 401 in dev
+  { pattern: /^\/dashboard/, authenticate: true } // Pages: redirect to login in dev
 ];
 
 app.use(developerAuthentication({ policies: authPolicies }));
 app.use(cloudflareAccess({ policies: authPolicies }));
 ```
+
+The `redirect` property only affects `developerAuthentication`
+(`cloudflareAccess` always returns 401). Use `redirect: false` for API
+routes so unauthenticated requests get a 401 JSON response in local
+development, matching production behaviour.
 
 ### 3. Never Add `/_auth/*` to `authPolicies`
 
@@ -251,7 +257,7 @@ const app = new Hono<Env>();
 
 const authPolicies: PathPolicy[] = [
   { pattern: /^\/api\/version$/, authenticate: false }, // public
-  { pattern: /^\/api\//, authenticate: true } // protected
+  { pattern: /^\/api\//, authenticate: true, redirect: false } // protected API — 401 in dev
   // ⚠ Never add /_auth/* here — developerAuthentication owns those paths internally
 ];
 
@@ -296,10 +302,20 @@ const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 interface PathPolicy {
   pattern: RegExp; // tested against request pathname
   authenticate: boolean; // true = require auth, false = public bypass
+  redirect?: boolean; // true (default) = 302 to login, false = 401 JSON
 }
 ```
 
 Policies are evaluated in **first-match-wins** order.
+
+The optional `redirect` property controls how `developerAuthentication`
+responds to unauthenticated requests on protected paths:
+
+- `true` _(default)_ -- 302 redirect to the login form. Use for page routes.
+- `false` -- 401 JSON `{ error: "Authentication required" }`. Use for API
+  routes so local dev matches production (`cloudflareAccess` always returns 401).
+
+`cloudflareAccess` ignores this property.
 
 ### `DeveloperAuthSettings`
 
@@ -364,8 +380,12 @@ Incoming request
   ├── GET /_auth/login                        → render login form ← never reached if /_auth/* is in policies
   ├── POST /_auth/callback                    → sign dev JWT, set CF_Authorization cookie, redirect
   ├── CF_Authorization cookie valid?          → inject CF headers, next()
-  ├── CF_Authorization cookie invalid/expired → clear cookie, redirect to login
-  └── No auth at all                          → redirect to /_auth/login?redirect=<pathname>
+  ├── CF_Authorization cookie invalid/expired →
+  │     redirect: true  (default)             → clear cookie, redirect to login
+  │     redirect: false                       → clear cookie, 401 JSON
+  └── No auth at all →
+        redirect: true  (default)             → redirect to /_auth/login?redirect=<pathname>
+        redirect: false                       → 401 JSON { error: "Authentication required" }
 ```
 
 ### `cloudflareAccess` JWT verification order
@@ -508,7 +528,7 @@ const MOCK_ENV = { CLOUDFLARE_TEAM_DOMAIN: "test.cloudflareaccess.com" };
 
 const authPolicies: PathPolicy[] = [
   { pattern: /^\/api\/version$/, authenticate: false },
-  { pattern: /^\/api\//, authenticate: true }
+  { pattern: /^\/api\//, authenticate: true, redirect: false } // API routes return 401, not redirect
 ];
 
 function createApp() {
@@ -523,9 +543,9 @@ function createApp() {
 describe("API auth", () => {
   it("returns 401 on a protected route with no token", async () => {
     const app = createApp();
-    // No JWT_HEADER → developerAuthentication redirects to login
+    // redirect: false → developerAuthentication returns 401 JSON (not 302)
     const res = await app.fetch(new Request("http://localhost/api/me"), MOCK_ENV);
-    expect(res.status).toBe(302);
+    expect(res.status).toBe(401);
   });
 
   it("returns the authenticated user for a valid token", async () => {
@@ -563,7 +583,7 @@ describe("API auth", () => {
       MOCK_ENV
     );
 
-    expect(res.status).toBe(302); // redirected back to login
+    expect(res.status).toBe(401); // redirect: false → 401 instead of 302
   });
 
   it("can test different roles or identities in the same suite", async () => {
