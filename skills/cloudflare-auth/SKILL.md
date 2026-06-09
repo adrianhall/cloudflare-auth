@@ -13,6 +13,7 @@ Load this skill whenever a developer is:
 - Setting up path-based auth policies (some routes public, some protected)
 - Asking why `CF_Authorization` cookie is not being set before API calls
 - Configuring `wrangler.jsonc` for a Worker that handles both auth and static assets
+- Provisioning Cloudflare Access infrastructure with Terraform (applications, policies, IdP linking)
 
 ---
 
@@ -36,9 +37,9 @@ Without this library, developers either skip auth entirely in dev (risky) or run
 This package is **not published to npm**. Install directly from GitHub (`dist/` is committed):
 
 ```bash
-npm install github:adrianhall/cloudflare-auth#1.1.0 hono
+npm install github:adrianhall/cloudflare-auth#1.1.1 hono
 # or
-pnpm add github:adrianhall/cloudflare-auth#1.1.0 hono
+pnpm add github:adrianhall/cloudflare-auth#1.1.1 hono
 ```
 
 Peer dependency: `hono ^4.0.0`
@@ -352,9 +353,10 @@ Controls what happens when a request path matches **no policy**:
 
 ## Environment Variables
 
-| Variable                 | Required         | Description                                                                                                        |
-| ------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `CLOUDFLARE_TEAM_DOMAIN` | Yes (production) | Your Cloudflare Access team domain, e.g. `myteam.cloudflareaccess.com`. Used to fetch the JWKS for JWT validation. |
+| Variable                 | Required         | Description                                                                                                                             |
+| ------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_TEAM_DOMAIN` | Yes (production) | Your Cloudflare Access team domain, e.g. `myteam.cloudflareaccess.com`. Used to fetch the JWKS for JWT validation.                      |
+| `CLOUDFLARE_IDP_ID`      | Terraform only   | UUID of the Identity Provider in Zero Trust. Used in Terraform to create IdP-linked Access policies. Not read by the Worker at runtime. |
 
 Set via wrangler config:
 
@@ -445,6 +447,153 @@ All three settings in the `assets` block are required:
 > **Note for the Cloudflare Vite plugin:** When using `@cloudflare/vite-plugin`, the
 > `assets.directory` field is not needed — the plugin points it to the client build
 > output automatically.
+
+---
+
+## Cloudflare Access Terraform Configuration
+
+When provisioning the Cloudflare Access application and policies with Terraform, use the **v5 provider** (`cloudflare/cloudflare ~> 5.0`) together with the `jrhouston/dotenv` provider to read credentials from `.env`.
+
+### Critical Rules
+
+#### 1. Use v5 Resource Names
+
+The v5 provider renamed all Zero Trust resources. Using v4 names causes `terraform apply` to fail with "resource type not found".
+
+| v4 name (wrong)                 | v5 name (correct)                          |
+| ------------------------------- | ------------------------------------------ |
+| `cloudflare_access_application` | `cloudflare_zero_trust_access_application` |
+| `cloudflare_access_policy`      | `cloudflare_zero_trust_access_policy`      |
+
+#### 2. Policies Are Standalone Resources — Never Embedded
+
+LLMs frequently try to embed policy decision/include blocks directly inside the application resource. **This does not work in v5.** Policies must be separate `cloudflare_zero_trust_access_policy` resources, and the application references them by ID with a numeric precedence.
+
+```hcl
+# WRONG — policy embedded inline in the application block (v4 pattern, broken in v5)
+resource "cloudflare_zero_trust_access_application" "app" {
+  account_id = local.account_id
+  domain     = "${local.worker_name}.${local.workers_domain}"
+  type       = "self_hosted"
+  policies = [{
+    decision = "allow"
+    include  = [{ login_method = { id = local.idp_id } }]
+  }]
+}
+
+# CORRECT — standalone policy resource, linked to the application by ID
+resource "cloudflare_zero_trust_access_policy" "allow_idp" {
+  account_id = local.account_id
+  name       = "${local.worker_name} - Allow IdP users"
+  decision   = "allow"
+  include = [{
+    login_method = {
+      id = local.idp_id
+    }
+  }]
+}
+
+resource "cloudflare_zero_trust_access_application" "app" {
+  account_id                = local.account_id
+  name                      = local.worker_name
+  domain                    = "${local.worker_name}.${local.workers_domain}"
+  type                      = "self_hosted"
+  session_duration          = "24h"
+  allowed_idps              = [local.idp_id]
+  auto_redirect_to_identity = true
+  policies = [{
+    id         = cloudflare_zero_trust_access_policy.allow_idp.id
+    precedence = 1
+  }]
+}
+```
+
+### Complete Terraform Example
+
+**`terraform.tf`**
+
+```hcl
+terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.0"
+    }
+    dotenv = {
+      source  = "jrhouston/dotenv"
+      version = "~> 1.0"
+    }
+  }
+}
+```
+
+**`main.tf`**
+
+```hcl
+data "dotenv" "env" {
+  filename = "../.env"   # path relative to the infra/ working directory
+}
+
+locals {
+  account_id     = data.dotenv.env.env.CLOUDFLARE_ACCOUNT_ID
+  worker_name    = data.dotenv.env.env.TF_VAR_worker_name
+  team_domain    = data.dotenv.env.env.CLOUDFLARE_TEAM_DOMAIN
+  idp_id         = data.dotenv.env.env.CLOUDFLARE_IDP_ID
+  workers_domain = data.dotenv.env.env.CLOUDFLARE_WORKERS_DOMAIN
+}
+
+provider "cloudflare" {
+  api_token = data.dotenv.env.env.CLOUDFLARE_API_TOKEN
+}
+
+# Worker registration — Wrangler handles code deployment separately
+resource "cloudflare_worker" "app" {
+  account_id = local.account_id
+  name       = local.worker_name
+}
+
+# Standalone Access policy — must NOT be embedded inside the application block
+resource "cloudflare_zero_trust_access_policy" "allow_idp" {
+  account_id = local.account_id
+  name       = "${local.worker_name} - Allow IdP users"
+  decision   = "allow"
+  include = [{
+    login_method = {
+      id = local.idp_id
+    }
+  }]
+}
+
+# Access application — links to the policy by ID
+resource "cloudflare_zero_trust_access_application" "app" {
+  account_id                = local.account_id
+  name                      = local.worker_name
+  domain                    = "${local.worker_name}.${local.workers_domain}"
+  type                      = "self_hosted"
+  session_duration          = "24h"
+  allowed_idps              = [local.idp_id]
+  auto_redirect_to_identity = true
+  policies = [{
+    id         = cloudflare_zero_trust_access_policy.allow_idp.id
+    precedence = 1
+  }]
+}
+```
+
+**`.env.example`**
+
+```dotenv
+CLOUDFLARE_ACCOUNT_ID=          # 32-char hex account ID
+CLOUDFLARE_API_TOKEN=           # Account API token (cfat_...)
+CLOUDFLARE_WORKERS_DOMAIN=      # e.g. yoursubdomain.workers.dev
+CLOUDFLARE_TEAM_DOMAIN=         # e.g. your-org.cloudflareaccess.com
+CLOUDFLARE_IDP_ID=              # UUID from Zero Trust → Integrations → Identity Providers
+TF_VAR_worker_name=             # Logical name prefix for all resources
+```
+
+> **Finding `CLOUDFLARE_IDP_ID`:** In the Cloudflare Zero Trust dashboard, navigate to **Integrations → Identity Providers**, select your IdP, and copy the UUID from the URL.
 
 ---
 
@@ -667,21 +816,24 @@ app.use(cloudflareAccess({ policies, devSecret: TEST_SECRET }));
 
 ## Anti-Patterns
 
-| Anti-pattern                                                                 | Problem                                                                                                                                                                                                     | Fix                                                                                                                                                                                                           |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cloudflareAccess` registered before `developerAuthentication`               | In dev, `cloudflareAccess` sees no JWT and returns `401` before `developerAuthentication` can inject headers                                                                                                | Always register `developerAuthentication` first                                                                                                                                                               |
-| Different `policies` arrays for each middleware                              | Auth behavior is inconsistent between them                                                                                                                                                                  | Define one `PathPolicy[]` and pass it to both                                                                                                                                                                 |
-| Adding `{ pattern: /^\/_auth\//, authenticate: false }` to `authPolicies`    | Policy check fires before internal login-form handling; `next()` is called and the login form is never served — browser gets 404                                                                            | Do not add `/_auth/*` to policies. `developerAuthentication` owns those paths and requires no policy entry.                                                                                                   |
-| Missing `run_worker_first: true` in wrangler.jsonc                           | Page loads bypass the Worker entirely. `developerAuthentication` never runs, the cookie is never set, and the React app's API calls fail silently — `fetch()` follows the 302 redirect into login-page HTML | Always set `"run_worker_first": true` in the `assets` block                                                                                                                                                   |
-| Using `run_worker_first: ["/api/*", "/_auth/*"]` instead of `true`           | The initial page load (`GET /`) bypasses the Worker. API calls reach the Worker, but the cookie was never set, so `developerAuthentication` redirects — and `fetch()` swallows the redirect silently        | Use `run_worker_first: true` (not selective patterns)                                                                                                                                                         |
-| Using `binding: "ASSETS"` without `run_worker_first: true`                   | The binding only makes `env.ASSETS` available to Worker code — it does **not** change routing. Page loads still bypass the Worker                                                                           | Add `"run_worker_first": true` alongside the binding                                                                                                                                                          |
-| Missing `binding: "ASSETS"`                                                  | Without the binding, the catch-all route `c.env.ASSETS.fetch(c.req.raw)` crashes with "Internal Server Error" because `ASSETS` is undefined                                                                 | Add `"binding": "ASSETS"` to the `assets` block                                                                                                                                                               |
-| Using `serveStatic` from `hono/cloudflare-workers`                           | `serveStatic` reads `c.env.__STATIC_CONTENT` (legacy Workers Sites KV). With `assets.binding`, `__STATIC_CONTENT` is `undefined` — all asset requests return 404                                            | Use `app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw))`                                                                                                                                                      |
-| Assuming `Cf-Access-User` header is set by Cloudflare Access                 | CF Access sets `Cf-Access-Jwt-Assertion` and `Cf-Access-Authenticated-User-Email` but does **not** set `Cf-Access-User`. The `sub` claim is extracted from the JWT by `cloudflareAccess` middleware         | Use `c.get("userSub")` from context variables, not the header directly                                                                                                                                        |
-| Not setting `CLOUDFLARE_TEAM_DOMAIN` in production                           | `cloudflareAccess` cannot fetch the JWKS; all real Access JWTs fail verification                                                                                                                            | Set the var in `wrangler.jsonc` or via a secret                                                                                                                                                               |
-| Not adding `AuthVariables` to the Hono generic                               | `c.get("userEmail")` returns `unknown`                                                                                                                                                                      | `new Hono<{ Bindings: Env; Variables: AuthVariables }>()`                                                                                                                                                     |
-| Checking for the authenticated user on a `authenticate: false` path          | `c.get("userEmail")` will be `undefined` on public paths — the middleware skips auth processing entirely                                                                                                    | Only access context vars on protected routes                                                                                                                                                                  |
-| Wrapping middleware in arrow functions: `(c, next) => middleware()(c, next)` | Creates a new middleware instance on every request, obscures Hono's type inference, and masks type errors that would catch misconfiguration. Often generated by coding LLMs as a "type fix"                 | Register middleware directly: `app.use(developerAuthentication({ ... }))`. If TypeScript complains, the root cause is likely dual copies of hono (see installation notes) — fix the dependency, not the types |
+| Anti-pattern                                                                                            | Problem                                                                                                                                                                                                     | Fix                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cloudflareAccess` registered before `developerAuthentication`                                          | In dev, `cloudflareAccess` sees no JWT and returns `401` before `developerAuthentication` can inject headers                                                                                                | Always register `developerAuthentication` first                                                                                                                                                               |
+| Different `policies` arrays for each middleware                                                         | Auth behavior is inconsistent between them                                                                                                                                                                  | Define one `PathPolicy[]` and pass it to both                                                                                                                                                                 |
+| Adding `{ pattern: /^\/_auth\//, authenticate: false }` to `authPolicies`                               | Policy check fires before internal login-form handling; `next()` is called and the login form is never served — browser gets 404                                                                            | Do not add `/_auth/*` to policies. `developerAuthentication` owns those paths and requires no policy entry.                                                                                                   |
+| Missing `run_worker_first: true` in wrangler.jsonc                                                      | Page loads bypass the Worker entirely. `developerAuthentication` never runs, the cookie is never set, and the React app's API calls fail silently — `fetch()` follows the 302 redirect into login-page HTML | Always set `"run_worker_first": true` in the `assets` block                                                                                                                                                   |
+| Using `run_worker_first: ["/api/*", "/_auth/*"]` instead of `true`                                      | The initial page load (`GET /`) bypasses the Worker. API calls reach the Worker, but the cookie was never set, so `developerAuthentication` redirects — and `fetch()` swallows the redirect silently        | Use `run_worker_first: true` (not selective patterns)                                                                                                                                                         |
+| Using `binding: "ASSETS"` without `run_worker_first: true`                                              | The binding only makes `env.ASSETS` available to Worker code — it does **not** change routing. Page loads still bypass the Worker                                                                           | Add `"run_worker_first": true` alongside the binding                                                                                                                                                          |
+| Missing `binding: "ASSETS"`                                                                             | Without the binding, the catch-all route `c.env.ASSETS.fetch(c.req.raw)` crashes with "Internal Server Error" because `ASSETS` is undefined                                                                 | Add `"binding": "ASSETS"` to the `assets` block                                                                                                                                                               |
+| Using `serveStatic` from `hono/cloudflare-workers`                                                      | `serveStatic` reads `c.env.__STATIC_CONTENT` (legacy Workers Sites KV). With `assets.binding`, `__STATIC_CONTENT` is `undefined` — all asset requests return 404                                            | Use `app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw))`                                                                                                                                                      |
+| Assuming `Cf-Access-User` header is set by Cloudflare Access                                            | CF Access sets `Cf-Access-Jwt-Assertion` and `Cf-Access-Authenticated-User-Email` but does **not** set `Cf-Access-User`. The `sub` claim is extracted from the JWT by `cloudflareAccess` middleware         | Use `c.get("userSub")` from context variables, not the header directly                                                                                                                                        |
+| Not setting `CLOUDFLARE_TEAM_DOMAIN` in production                                                      | `cloudflareAccess` cannot fetch the JWKS; all real Access JWTs fail verification                                                                                                                            | Set the var in `wrangler.jsonc` or via a secret                                                                                                                                                               |
+| Not adding `AuthVariables` to the Hono generic                                                          | `c.get("userEmail")` returns `unknown`                                                                                                                                                                      | `new Hono<{ Bindings: Env; Variables: AuthVariables }>()`                                                                                                                                                     |
+| Checking for the authenticated user on a `authenticate: false` path                                     | `c.get("userEmail")` will be `undefined` on public paths — the middleware skips auth processing entirely                                                                                                    | Only access context vars on protected routes                                                                                                                                                                  |
+| Wrapping middleware in arrow functions: `(c, next) => middleware()(c, next)`                            | Creates a new middleware instance on every request, obscures Hono's type inference, and masks type errors that would catch misconfiguration. Often generated by coding LLMs as a "type fix"                 | Register middleware directly: `app.use(developerAuthentication({ ... }))`. If TypeScript complains, the root cause is likely dual copies of hono (see installation notes) — fix the dependency, not the types |
+| Using v4 Terraform resource names (`cloudflare_access_application`, `cloudflare_access_policy`)         | These resource types do not exist in the v5 provider; `terraform apply` fails immediately with "resource type not found"                                                                                    | Rename to `cloudflare_zero_trust_access_application` and `cloudflare_zero_trust_access_policy`                                                                                                                |
+| Embedding policy `decision`/`include` blocks directly inside `cloudflare_zero_trust_access_application` | Inline policy blocks are a v4 pattern that is not supported in v5; Terraform will error or silently produce an application with no effective policy                                                         | Create a standalone `cloudflare_zero_trust_access_policy` resource, then reference it via `policies = [{ id = <policy>.id, precedence = 1 }]`                                                                 |
+| Omitting `CLOUDFLARE_IDP_ID` from `.env` and `allowed_idps` on the application                          | Access falls back to showing all configured identity providers instead of redirecting directly to the intended IdP                                                                                          | Add `CLOUDFLARE_IDP_ID` to `.env`, assign it to `local.idp_id`, and set both `allowed_idps = [local.idp_id]` on the application and `login_method = { id = local.idp_id }` in the policy's `include` block    |
 
 ---
 
