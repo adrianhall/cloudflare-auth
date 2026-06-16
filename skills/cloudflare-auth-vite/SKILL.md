@@ -48,16 +48,29 @@ ever runs `cloudflareAccess()`.**
 
 ## Installation
 
+This package is **not published to npm**. Install directly from GitHub
+using a release **tag** (this project tags every release; never install
+from `#main`):
+
 ```bash
-npm install github:adrianhall/cloudflare-auth#main hono
+npm install github:adrianhall/cloudflare-auth#1.2.0 hono
 ```
 
-Peer dependencies: `hono ^4.0.0` (Worker) and `vite >=5` (dev only,
+Peer dependencies: `hono ^4.12.0` (Worker) and `vite ^8.0.0` (dev only,
 declared optional). The plugin imports from a dedicated subpath:
 
 ```ts
 import { cloudflareAccessPlugin } from "@adrianhall/cloudflare-auth/vite";
 ```
+
+> **You MUST use `@adrianhall/cloudflare-auth`, not `@hono/cloudflare-access`.**
+> The two are not interchangeable. `cloudflareAccessPlugin()` signs an
+> **HS256** dev JWT that `cloudflareAccess()` from this package validates
+> via its HMAC-first path with no network call. `@hono/cloudflare-access`
+> only validates **RS256** tokens against the live Access JWKS endpoint,
+> so it rejects the dev token and cannot work with this plugin (RS256/JWKS
+> bridging for `@hono/cloudflare-access` is explicitly out of scope). Use
+> `cloudflareAccess()` from `@adrianhall/cloudflare-auth` in the Worker.
 
 ---
 
