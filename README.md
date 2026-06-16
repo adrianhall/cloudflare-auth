@@ -412,6 +412,101 @@ were determined empirically. The full experiment methodology and results
 are documented in
 [`example/docs/MANUAL_TESTS.md`](https://github.com/adrianhall/cloudflare-auth/tree/main/example/docs/MANUAL_TESTS.md).
 
+## Local development with Vite (no Worker changes)
+
+If you build your app with [`@cloudflare/vite-plugin`](https://developers.cloudflare.com/workers/vite-plugin/)
+(for example, a C3 React + Vite project), you can emulate the Cloudflare
+Access edge **entirely in the Vite dev server** with the
+`cloudflareAccessPlugin()` exported from `@adrianhall/cloudflare-auth/vite`.
+
+In this mode your Worker keeps **only** the production `cloudflareAccess()`
+middleware — there is no `developerAuthentication()` and no
+`run_worker_first`. All dev-time login, logout, identity, and header
+injection happen at the connect layer in front of `@cloudflare/vite-plugin`.
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { cloudflare } from "@cloudflare/vite-plugin";
+import { cloudflareAccessPlugin } from "@adrianhall/cloudflare-auth/vite";
+
+const policies = [
+  { pattern: /^\/api\/version$/, authenticate: false },
+  { pattern: /^\/api\//, authenticate: true, redirect: false },
+  { pattern: /^\/.*/, authenticate: true }
+];
+
+export default defineConfig({
+  plugins: [
+    // MUST come before cloudflare() so it can inject the Access headers
+    // before the request is dispatched into the Worker runtime.
+    cloudflareAccessPlugin({
+      policies,
+      users: [{ email: "alice@example.com", name: "Alice" }, { email: "bob@example.com" }]
+    }),
+    cloudflare(),
+    react()
+  ]
+});
+```
+
+```ts
+// worker/index.ts — the SAME policies, ONLY cloudflareAccess()
+import { Hono } from "hono";
+import { cloudflareAccess, type AuthVariables } from "@adrianhall/cloudflare-auth";
+
+const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
+app.use(cloudflareAccess({ policies }));
+app.get("/api/me", (c) => c.json({ email: c.get("userEmail"), sub: c.get("userSub") }));
+export default app;
+```
+
+The plugin:
+
+1. **Owns `/cdn-cgi/access/*`** — `login` (renders a dev login form with
+   selectable identities), `logout` (clears the `CF_Authorization`
+   cookie), and `get-identity` (returns identity JSON matching the Access
+   shape).
+2. **Gates HTML navigations** — an unauthenticated navigation is
+   redirected to the login form; API routes with `redirect: false` return
+   `401`.
+3. **Injects headers then hands off** — for an authenticated session it
+   signs an HS256 dev JWT and sets `cf-access-jwt-assertion` (+
+   `cf-access-authenticated-user-email`), then lets the request flow into
+   the Worker, where `cloudflareAccess()` validates it via its HMAC-first
+   path (no network).
+4. **Passes Vite internals through** untouched (`/@vite`, `/@fs`,
+   `/node_modules`, HMR, `/src/`).
+
+### Options
+
+| Option          | Type                                 | Default                   | Description                                          |
+| --------------- | ------------------------------------ | ------------------------- | ---------------------------------------------------- |
+| `policies`      | `PathPolicy[]`                       | all paths protected       | Same array you pass to `cloudflareAccess()`.         |
+| `devSecret`     | `string`                             | built-in dev key          | Must match `cloudflareAccess({ devSecret })` if set. |
+| `users`         | `{ email: string; name?: string }[]` | `[]` (single email input) | Selectable identities on the login form.             |
+| `loginPath`     | `string`                             | `"/cdn-cgi/access/login"` | Login form route.                                    |
+| `tokenLifetime` | `number`                             | `86400` (24 h)            | Dev JWT lifetime in seconds.                         |
+
+> **Why `cloudflareAccessPlugin()` must run before `cloudflare()`:**
+> `@cloudflare/vite-plugin` builds the `Request` it dispatches into
+> `workerd` from `req.rawHeaders` (not the parsed `req.headers`). The
+> plugin pushes the JWT onto `req.rawHeaders` and registers its
+> middleware with `enforce: "pre"` so it runs ahead of the plugin's
+> dispatch handler. Because this relies on an internal detail of
+> `@cloudflare/vite-plugin`, **pin that dependency** and rely on the
+> demo's e2e guard (`npm run test:e2e:demo`) to catch regressions.
+
+A complete C3-scaffolded demo lives in
+[`example-vite/`](https://github.com/adrianhall/cloudflare-auth/tree/main/example-vite).
+
+```bash
+cd example-vite
+npm install
+npm run dev   # http://localhost:5173 — gated by cloudflareAccessPlugin()
+```
+
 ## Development
 
 ```bash

@@ -41,3 +41,6 @@ node_modules/
 # Playwright
 test-results/
 playwright-report/
+
+# Wrangler state files
+.wrangler/
