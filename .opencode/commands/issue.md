@@ -75,7 +75,7 @@ If no issue number is provided, ask for one before doing any work.
    npm run test:e2e
    ```
 
-   These checks must run with zero warnings or errors.  Fix the warnings or errors before continuing
+   These checks must run with zero warnings or errors. Fix the warnings or errors before continuing
 
 9. Review changes.
 
