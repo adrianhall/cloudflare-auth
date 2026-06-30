@@ -14,7 +14,16 @@
 
 import { test, expect, request } from "@playwright/test";
 
+import { ALICE_SUB } from "../shared/policies";
+
 const BASE = "http://localhost:5173";
+
+/**
+ * Canonical UUID shape used for default dev subjects (matches the
+ * library's `crypto.randomUUID()` output). Identities without a pinned
+ * `sub` get a fresh UUID per login, so the exact value cannot be asserted.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 test.describe("Vite Cloudflare Access demo", () => {
   test("unauthenticated navigation is redirected to the dev login form", async ({ page }) => {
@@ -33,7 +42,8 @@ test.describe("Vite Cloudflare Access demo", () => {
     // Back on the SPA, identity is fetched from /api/me.
     await expect(page).toHaveURL(`${BASE}/`);
     await expect(page.getByTestId("identity-email")).toHaveText("alice@example.com");
-    await expect(page.getByTestId("identity-sub")).toHaveText("dev-alice@example.com");
+    // Alice is pinned to a UUID-style sub in shared/policies.ts.
+    await expect(page.getByTestId("identity-sub")).toHaveText(ALICE_SUB);
   });
 
   test("switching identity and logging out works", async ({ page }) => {
@@ -64,10 +74,10 @@ test.describe("Vite Cloudflare Access demo", () => {
     // The injected cf-access-jwt-assertion header must reach the Worker.
     const me = await ctx.get("/api/me");
     expect(me.status()).toBe(200);
-    expect(await me.json()).toMatchObject({
-      email: "carol@example.com",
-      sub: "dev-carol@example.com"
-    });
+    // Carol has no pinned sub, so the value is a fresh random UUID.
+    const identity = (await me.json()) as { email: string; sub: string };
+    expect(identity.email).toBe("carol@example.com");
+    expect(identity.sub).toMatch(UUID_RE);
 
     // Public route stays open.
     const version = await ctx.get("/api/version");

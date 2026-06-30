@@ -18,6 +18,15 @@ export const authPolicies: PathPolicy[] = [
 ];
 
 /**
+ * Alice's pinned, realistic UUID-style subject.
+ *
+ * Exported so tests can assert the rendered `sub` against the single
+ * source of truth instead of hard-coding the value (or relying on a
+ * stale email-derived `dev-<email>` scheme).
+ */
+export const ALICE_SUB = "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed";
+
+/**
  * Selectable identities shown on the dev login form.
  *
  * `sub` is optional. When pinned (as for Alice below) the identity gets a
@@ -25,6 +34,6 @@ export const authPolicies: PathPolicy[] = [
  * fresh UUID is generated each time that identity signs in.
  */
 export const devUsers = [
-  { email: "alice@example.com", name: "Alice Admin", sub: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed" },
+  { email: "alice@example.com", name: "Alice Admin", sub: ALICE_SUB },
   { email: "bob@example.com", name: "Bob Viewer" }
 ];
