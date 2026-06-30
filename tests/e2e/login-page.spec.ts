@@ -206,7 +206,9 @@ test.describe("Login page – browser WCAG 2.1 AA validation", () => {
   }) => {
     await page.goto(`${appUrl}/_auth/login?redirect=/`);
 
-    // autofocus lands on email; one Tab reaches the submit button.
+    // autofocus lands on email — confirm it before tabbing so the Tab press
+    // doesn't race the autofocus landing; one Tab then reaches the submit button.
+    await expect(page.locator("#email")).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.locator('button[type="submit"]')).toBeFocused();
 
