@@ -99,7 +99,12 @@ export default defineConfig({
   plugins: [
     cloudflareAccessPlugin({
       policies: authPolicies,
-      users: [{ email: "alice@example.com", name: "Alice" }, { email: "bob@example.com" }]
+      // `sub` is optional: pin it to give an identity a stable, realistic
+      // (UUID-style) subject. When omitted a UUID is generated per login.
+      users: [
+        { email: "alice@example.com", name: "Alice", sub: "alice-uuid" },
+        { email: "bob@example.com" }
+      ]
     }),
     cloudflare(),
     react()

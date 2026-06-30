@@ -15,10 +15,19 @@
 
 /** A selectable identity rendered on the dev login form. */
 export interface DevLoginUser {
-  /** Email address used as the JWT `email`/`sub` source. */
+  /** Email address used as the JWT `email` claim. */
   email: string;
   /** Optional human-friendly display name. */
   name?: string;
+  /**
+   * Optional subject claim to pin for this identity.
+   *
+   * When provided it is used **verbatim** as the JWT `sub` so the
+   * identity has a stable, realistic subject across logins.  When
+   * omitted a random UUID is generated each time the user signs in
+   * (matching the shape of a real Cloudflare Access `sub`).
+   */
+  sub?: string;
 }
 
 /**

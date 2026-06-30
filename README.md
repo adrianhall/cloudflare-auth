@@ -358,12 +358,12 @@ app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
 ## Cookie & Header Reference
 
-| Name                                 | Type   | Set by                             | Description                                                                                                                            |
-| ------------------------------------ | ------ | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `CF_Authorization`                   | Cookie | Cloudflare Access / dev middleware | JWT token. HttpOnly in dev; not HttpOnly in production (CF Access).                                                                    |
-| `Cf-Access-Jwt-Assertion`            | Header | Cloudflare Access / dev middleware | Same JWT as the cookie                                                                                                                 |
-| `Cf-Access-Authenticated-User-Email` | Header | Cloudflare Access / dev middleware | User's email address                                                                                                                   |
-| `Cf-Access-User`                     | Header | Dev middleware only                | Unique user identifier. **Not set by Cloudflare Access** — the `sub` claim is extracted from the JWT by `cloudflareAccess` middleware. |
+| Name                                 | Type   | Set by                             | Description                                                                                                                                                                                                                                                 |
+| ------------------------------------ | ------ | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CF_Authorization`                   | Cookie | Cloudflare Access / dev middleware | JWT token. HttpOnly in dev; not HttpOnly in production (CF Access).                                                                                                                                                                                         |
+| `Cf-Access-Jwt-Assertion`            | Header | Cloudflare Access / dev middleware | Same JWT as the cookie                                                                                                                                                                                                                                      |
+| `Cf-Access-Authenticated-User-Email` | Header | Cloudflare Access / dev middleware | User's email address                                                                                                                                                                                                                                        |
+| `Cf-Access-User`                     | Header | Dev middleware only                | Unique user identifier. **Not set by Cloudflare Access** — the `sub` claim is extracted from the JWT by `cloudflareAccess` middleware. Dev tokens default to a generated UUID `sub`; override per identity (see below) or via `signDevJwt(email, { sub })`. |
 
 ## Testing Utilities
 
@@ -391,6 +391,17 @@ const res = await app.fetch(
   }),
   env
 );
+```
+
+The `sub` claim defaults to a generated **UUID** (matching the shape of a
+real Cloudflare Access subject) rather than an email-derived value, so
+strict downstream subject validators (e.g. `[A-Za-z0-9-]`) accept it. When
+a test needs to assert an exact subject, pass `sub` explicitly — it is used
+verbatim:
+
+```ts
+const token = await signDevJwt("alice@example.com", { sub: "alice-uuid" });
+// c.get("userSub") === "alice-uuid"
 ```
 
 ## Example App
@@ -443,7 +454,12 @@ export default defineConfig({
     // before the request is dispatched into the Worker runtime.
     cloudflareAccessPlugin({
       policies,
-      users: [{ email: "alice@example.com", name: "Alice" }, { email: "bob@example.com" }]
+      // `sub` is optional; pin it to give an identity a stable, realistic
+      // subject across logins. When omitted a UUID is generated per login.
+      users: [
+        { email: "alice@example.com", name: "Alice", sub: "alice-uuid" },
+        { email: "bob@example.com" }
+      ]
     }),
     cloudflare(),
     react()

@@ -115,6 +115,19 @@ describe("cloudflareAccessPlugin", () => {
     expect(use).toHaveBeenCalledTimes(1);
     expect(typeof use.mock.calls[0][0]).toBe("function");
   });
+
+  it("defaults options to {} when called with no arguments", async () => {
+    const mw = createAccessDevMiddleware(); // exercises the `options = {}` default
+    const req = makeReq({ url: "/@vite/client" }); // Vite-internal → immediate next()
+    const res = makeRes();
+
+    const nextCalled = await new Promise<boolean>((resolve) => {
+      mw(req, res, () => resolve(true));
+    });
+
+    expect(nextCalled).toBe(true);
+    expect(req.headers[JWT_HEADER]).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -216,6 +229,48 @@ describe("login submit", () => {
     expect(payload.email).toBe("custom@example.com");
   });
 
+  it("pins a configured user's sub verbatim in the signed JWT", async () => {
+    const users = [{ email: "alice@example.com", name: "Alice", sub: "alice-fixed-uuid" }];
+    const body = new URLSearchParams({ email: "alice@example.com", redirect: "/" }).toString();
+    const req = makeReq({
+      url: "/cdn-cgi/access/login",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body
+    });
+    const res = makeRes();
+    await invoke({ users }, req, res);
+
+    const cookie = res._headers["set-cookie"];
+    const token = cookie.split(";")[0].split("=").slice(1).join("=");
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString("utf8"));
+    expect(payload.sub).toBe("alice-fixed-uuid");
+  });
+
+  it("generates a UUID sub for a custom email not in the users list", async () => {
+    const users = [{ email: "alice@example.com", name: "Alice", sub: "alice-fixed-uuid" }];
+    const body = new URLSearchParams({
+      "email": "alice@example.com",
+      "custom-email": "stranger@example.com",
+      "redirect": "/"
+    }).toString();
+    const req = makeReq({
+      url: "/cdn-cgi/access/login",
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body
+    });
+    const res = makeRes();
+    await invoke({ users }, req, res);
+
+    const cookie = res._headers["set-cookie"];
+    const token = cookie.split(";")[0].split("=").slice(1).join("=");
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString("utf8"));
+    expect(payload.email).toBe("stranger@example.com");
+    expect(payload.sub).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(payload.sub).not.toBe("alice-fixed-uuid");
+  });
+
   it("sets the Secure flag when forwarded over https", async () => {
     const body = new URLSearchParams({ email: "alice@example.com" }).toString();
     const req = makeReq({
@@ -295,7 +350,7 @@ describe("logout", () => {
 
 describe("get-identity", () => {
   it("returns an Access-shaped identity for a valid session", async () => {
-    const token = await signDevJwt("alice@example.com");
+    const token = await signDevJwt("alice@example.com", { sub: "alice-uuid" });
     const req = makeReq({
       url: "/cdn-cgi/access/get-identity",
       headers: { cookie: COOKIE(token) }
@@ -308,7 +363,7 @@ describe("get-identity", () => {
     const body = JSON.parse(res._body!);
     expect(body.email).toBe("alice@example.com");
     expect(body.name).toBe("Alice");
-    expect(body.sub ?? body.user_uuid).toBe("dev-alice@example.com");
+    expect(body.sub ?? body.user_uuid).toBe("alice-uuid");
     expect(Array.isArray(body.groups)).toBe(true);
     expect(body.idp).toBeTruthy();
     expect(body.geo).toBeTruthy();

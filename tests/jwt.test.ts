@@ -12,6 +12,9 @@ import {
   COOKIE_NAME
 } from "../src/jwt.js";
 
+/** Matches the canonical UUID shape used for default dev subjects. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Mock only getRemoteJwks so we can supply a local key set instead of
 // hitting a real Cloudflare Access certs endpoint.  The rest of the
 // module (e.g. ensureHttps) is preserved via importOriginal.
@@ -34,7 +37,27 @@ describe("JWT utilities", () => {
 
       expect(result).not.toBeNull();
       expect(result!.email).toBe("alice@example.com");
-      expect(result!.sub).toBe("dev-alice@example.com");
+      // Default sub is a generated UUID (not an email-derived value).
+      expect(result!.sub).toMatch(UUID_RE);
+      expect(result!.sub).not.toContain("@");
+    });
+
+    it("uses a provided sub verbatim", async () => {
+      const sub = "01J8XYZ-custom-subject";
+      const token = await signDevJwt("alice@example.com", { sub });
+      const result = await verifyDevJwt(token);
+
+      expect(result).not.toBeNull();
+      expect(result!.sub).toBe(sub);
+    });
+
+    it("generates a distinct UUID sub on each call when none is provided", async () => {
+      const a = await verifyDevJwt(await signDevJwt("alice@example.com"));
+      const b = await verifyDevJwt(await signDevJwt("alice@example.com"));
+
+      expect(a!.sub).toMatch(UUID_RE);
+      expect(b!.sub).toMatch(UUID_RE);
+      expect(a!.sub).not.toBe(b!.sub);
     });
 
     it("creates a token that can be verified with a custom secret", async () => {

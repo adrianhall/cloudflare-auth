@@ -59,7 +59,7 @@ describe("cloudflareAccess middleware", () => {
 
   describe("dev token verification", () => {
     it("sets context variables from a valid dev JWT in the header", async () => {
-      const token = await signDevJwt("alice@example.com");
+      const token = await signDevJwt("alice@example.com", { sub: "alice-uuid" });
       const app = createApp();
 
       const res = await fetchWithEnv(app, `${BASE}/api/test`, {
@@ -69,7 +69,8 @@ describe("cloudflareAccess middleware", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { email: string; sub: string };
       expect(body.email).toBe("alice@example.com");
-      expect(body.sub).toBe("dev-alice@example.com");
+      // The verbatim sub from the JWT flows through to c.get("userSub").
+      expect(body.sub).toBe("alice-uuid");
     });
 
     it("sets context variables from a valid dev JWT in the cookie", async () => {

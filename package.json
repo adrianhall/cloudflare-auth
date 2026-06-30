@@ -47,7 +47,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:a11y": "vitest run --project a11y",
-    "test:coverage": "vitest run --coverage --project unit",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "pretest:e2e:demo": "npm --prefix example-vite run refresh-auth",
     "test:e2e:demo": "playwright test --config playwright.demo.config.ts",
