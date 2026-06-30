@@ -50,16 +50,34 @@ const LOG_MODULE = "cf-access";
  *
  * **Verification order** (when JWT validation is performed):
  *
- * 1. Try HMAC verification with the dev secret (fast, in-process).
- * 2. Fall back to the remote JWKS endpoint for the team domain.
+ * 1. *(Opt-in)* When `enableDevTokens` is `true`, try HMAC verification
+ *    with the dev secret (fast, in-process).
+ * 2. Verify against the remote JWKS endpoint for the team domain.
+ *
+ * Developer-token verification is **fail-closed**: it is disabled by
+ * default so a deployed Worker never silently trusts a forgeable HS256
+ * token signed with the public {@link DEFAULT_DEV_SECRET}.  Enable it only
+ * in local development (e.g. `enableDevTokens: import.meta.env.DEV`).
  */
 export function cloudflareAccess(settings?: CloudflareAccessSettings): MiddlewareHandler {
   const policies = settings?.policies;
   const defaultAction = settings?.defaultAction ?? "block";
+  const enableDevTokens = settings?.enableDevTokens ?? false;
+  const devSecretProvided = typeof settings?.devSecret === "string";
   const devSecret = settings?.devSecret ?? DEFAULT_DEV_SECRET;
   const audience = settings?.audience;
   const teamDomainOverride = settings?.teamDomain;
   const log = createDefaultLogger(LOG_MODULE, settings?.logger);
+
+  // Loud, one-time warning: dev-token verification is on but no explicit
+  // secret was supplied, so the public DEFAULT_DEV_SECRET is in use.  This
+  // is only safe on localhost — never in a deployed Worker.
+  if (enableDevTokens && !devSecretProvided) {
+    log.warn(
+      "enableDevTokens is true but no devSecret was provided; verifying HS256 dev tokens "
+        + "with the public DEFAULT_DEV_SECRET. This is only safe in local development."
+    );
+  }
 
   return async (c, next) => {
     const pathname = new URL(c.req.url).pathname;
@@ -102,6 +120,7 @@ export function cloudflareAccess(settings?: CloudflareAccessSettings): Middlewar
     // 3.  Verify the token.
     // -----------------------------------------------------------------
     const result = await verifyToken(c, token, {
+      enableDevTokens,
       devSecret,
       audience,
       teamDomainOverride,
@@ -134,8 +153,11 @@ export function cloudflareAccess(settings?: CloudflareAccessSettings): Middlewar
 // ---------------------------------------------------------------------------
 
 /**
- * Attempt to verify a JWT, trying the dev secret first and then
- * Cloudflare Access JWKS.
+ * Attempt to verify a JWT.
+ *
+ * When `enableDevTokens` is `true`, the dev (HS256) secret is tried first
+ * as a fast in-process path; otherwise that path is skipped entirely and
+ * only Cloudflare Access JWKS verification runs (fail-closed default).
  *
  * Returns the verified claims or `null`.
  */
@@ -143,6 +165,7 @@ async function verifyToken(
   c: { env: unknown },
   token: string,
   opts: {
+    enableDevTokens: boolean;
     devSecret: string;
     audience?: string;
     teamDomainOverride?: string;
@@ -151,9 +174,12 @@ async function verifyToken(
 ): Promise<VerifiedToken | null> {
   const log = createDefaultLogger(LOG_MODULE, opts.logger);
 
-  // Fast path: dev-signed token.
-  const devResult = await verifyDevJwt(token, opts.devSecret);
-  if (devResult) return devResult;
+  // Fast path: dev-signed token.  Opt-in only — disabled by default so a
+  // deployed Worker never trusts a forgeable HS256 token.
+  if (opts.enableDevTokens) {
+    const devResult = await verifyDevJwt(token, opts.devSecret);
+    if (devResult) return devResult;
+  }
 
   // Slow path: Cloudflare Access JWKS.
   const teamDomain =

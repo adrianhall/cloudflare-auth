@@ -10,6 +10,10 @@
  * The Worker uses ONLY the production `cloudflareAccess()` middleware.
  * In dev it validates the plugin's HS256 token via HMAC (no network); in
  * production it validates the real Access RS256 token via JWKS.
+ *
+ * Dev-token verification is fail-closed and gated on `import.meta.env.DEV`
+ * (statically `true` under `vite dev`, `false` in the production build),
+ * so the deployed Worker never trusts a forgeable HS256 token.
  */
 import { Hono } from "hono";
 import { cloudflareAccess, type AuthVariables, type PathPolicy } from "@adrianhall/cloudflare-auth";
@@ -22,7 +26,12 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings; Variables: AuthVariables }>();
 
-app.use(cloudflareAccess({ policies: authPolicies as PathPolicy[] }));
+app.use(
+  cloudflareAccess({
+    policies: authPolicies as PathPolicy[],
+    enableDevTokens: import.meta.env.DEV
+  })
+);
 
 // Public — no authentication required.
 app.get("/api/version", (c) => c.json({ version: "1.0.0" }));

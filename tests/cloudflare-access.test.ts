@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
 import { cloudflareAccess, type AuthVariables, type Logger } from "../src/index.js";
-import { signDevJwt, JWT_HEADER, COOKIE_NAME } from "../src/jwt.js";
+import { signDevJwt, JWT_HEADER, COOKIE_NAME, DEFAULT_DEV_SECRET } from "../src/jwt.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -60,7 +60,7 @@ describe("cloudflareAccess middleware", () => {
   describe("dev token verification", () => {
     it("sets context variables from a valid dev JWT in the header", async () => {
       const token = await signDevJwt("alice@example.com", { sub: "alice-uuid" });
-      const app = createApp();
+      const app = createApp({ enableDevTokens: true });
 
       const res = await fetchWithEnv(app, `${BASE}/api/test`, {
         headers: { [JWT_HEADER]: token }
@@ -75,7 +75,7 @@ describe("cloudflareAccess middleware", () => {
 
     it("sets context variables from a valid dev JWT in the cookie", async () => {
       const token = await signDevJwt("bob@example.com");
-      const app = createApp();
+      const app = createApp({ enableDevTokens: true });
 
       const res = await fetchWithEnv(app, `${BASE}/api/test`, {
         headers: { Cookie: `${COOKIE_NAME}=${token}` }
@@ -89,7 +89,7 @@ describe("cloudflareAccess middleware", () => {
     it("prefers the header over the cookie when both are present", async () => {
       const headerToken = await signDevJwt("header@example.com");
       const cookieToken = await signDevJwt("cookie@example.com");
-      const app = createApp();
+      const app = createApp({ enableDevTokens: true });
 
       const res = await fetchWithEnv(app, `${BASE}/api/test`, {
         headers: {
@@ -106,7 +106,7 @@ describe("cloudflareAccess middleware", () => {
     it("works with a custom dev secret", async () => {
       const secret = "my-test-secret";
       const token = await signDevJwt("custom@example.com", { secret });
-      const app = createApp({ devSecret: secret });
+      const app = createApp({ devSecret: secret, enableDevTokens: true });
 
       const res = await fetchWithEnv(app, `${BASE}/api/test`, {
         headers: { [JWT_HEADER]: token }
@@ -115,6 +115,102 @@ describe("cloudflareAccess middleware", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { email: string; sub: string };
       expect(body.email).toBe("custom@example.com");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Fail-closed dev tokens (issue #14)
+  // -----------------------------------------------------------------------
+
+  describe("dev tokens are fail-closed by default", () => {
+    it("rejects a DEFAULT_DEV_SECRET-signed token when enableDevTokens is unset (bypass attempt)", async () => {
+      // Attacker mints a token with the published public secret and sends
+      // it as the Access assertion header.  With the default config the dev
+      // path is never tried, so only JWKS runs — and there is no real JWKS
+      // for the mock domain → 401.  This is the core bypass-prevention case.
+      const forged = await signDevJwt("attacker@evil.example", { secret: DEFAULT_DEV_SECRET });
+      const app = createApp();
+
+      const res = await fetchWithEnv(app, `${BASE}/api/test`, {
+        headers: { [JWT_HEADER]: forged }
+      });
+
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("Invalid or expired");
+    });
+
+    it("rejects a forged token in the cookie when enableDevTokens is unset", async () => {
+      const forged = await signDevJwt("attacker@evil.example", { secret: DEFAULT_DEV_SECRET });
+      const app = createApp();
+
+      const res = await fetchWithEnv(app, `${BASE}/api/test`, {
+        headers: { Cookie: `${COOKIE_NAME}=${forged}` }
+      });
+
+      expect(res.status).toBe(401);
+    });
+
+    it("does not bypass via dev token even on a defaultAction: bypass path", async () => {
+      // bypass only relaxes the *missing-token* case; a presented dev token
+      // must still fail verification when dev tokens are disabled, so no
+      // user is set.
+      const forged = await signDevJwt("attacker@evil.example", { secret: DEFAULT_DEV_SECRET });
+      const app = createApp({ defaultAction: "bypass" });
+
+      const res = await fetchWithEnv(app, `${BASE}/api/test`, {
+        headers: { [JWT_HEADER]: forged }
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { email: string | null; sub: string | null };
+      expect(body.email).toBeNull();
+      expect(body.sub).toBeNull();
+    });
+
+    it("verifies the same token once enableDevTokens is true", async () => {
+      const token = await signDevJwt("dev@example.com", { sub: "dev-uuid" });
+      const app = createApp({ enableDevTokens: true });
+
+      const res = await fetchWithEnv(app, `${BASE}/api/test`, {
+        headers: { [JWT_HEADER]: token }
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { email: string; sub: string };
+      expect(body.email).toBe("dev@example.com");
+      expect(body.sub).toBe("dev-uuid");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // One-time warning when enabling dev tokens without an explicit secret
+  // -----------------------------------------------------------------------
+
+  describe("enableDevTokens warning", () => {
+    it("logs a one-time warning when enabled without an explicit devSecret", () => {
+      const logger: Logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+      cloudflareAccess({ enableDevTokens: true, logger });
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(logger.warn).mock.calls[0][0]).toContain("DEFAULT_DEV_SECRET");
+    });
+
+    it("does not warn when an explicit devSecret is provided", () => {
+      const logger: Logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+      cloudflareAccess({ enableDevTokens: true, devSecret: "explicit-secret", logger });
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it("does not warn when dev tokens are disabled (default)", () => {
+      const logger: Logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+      cloudflareAccess({ logger });
+
+      expect(logger.warn).not.toHaveBeenCalled();
     });
   });
 
@@ -156,7 +252,7 @@ describe("cloudflareAccess middleware", () => {
 
     it("returns 401 when dev secret does not match", async () => {
       const token = await signDevJwt("alice@example.com", { secret: "secret-a" });
-      const app = createApp({ devSecret: "secret-b" });
+      const app = createApp({ devSecret: "secret-b", enableDevTokens: true });
 
       const res = await fetchWithEnv(app, `${BASE}/api/test`, {
         headers: { [JWT_HEADER]: token }
@@ -234,6 +330,7 @@ describe("cloudflareAccess middleware", () => {
     it("sets context variables for authenticated request with redirect: false", async () => {
       const token = await signDevJwt("alice@example.com");
       const app = createApp({
+        enableDevTokens: true,
         policies: [{ pattern: /^\/api\//, authenticate: true, redirect: false }]
       });
 
@@ -266,7 +363,7 @@ describe("cloudflareAccess middleware", () => {
 
     it("sets context variables when a valid JWT is present", async () => {
       const token = await signDevJwt("opt@example.com");
-      const app = createApp(settings);
+      const app = createApp({ ...settings, enableDevTokens: true });
 
       const res = await fetchWithEnv(app, `${BASE}/api/test`, {
         headers: { [JWT_HEADER]: token }
@@ -307,7 +404,7 @@ describe("cloudflareAccess middleware", () => {
   describe("team domain", () => {
     it("returns 401 when team domain is missing and token is not dev-signed", async () => {
       const token = await signDevJwt("alice@example.com", { secret: "unknown-secret" });
-      const app = createApp({ devSecret: "other-secret" });
+      const app = createApp({ devSecret: "other-secret", enableDevTokens: true });
 
       // Pass an empty env with no CLOUDFLARE_TEAM_DOMAIN.
       const res = await app.fetch(

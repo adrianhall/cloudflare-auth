@@ -25,10 +25,10 @@ Without this library, developers either skip auth entirely in dev (risky) or run
 
 **This library solves it with two middleware functions that always agree on the authenticated user:**
 
-| Middleware                | Production                               | Local dev                                                              |
-| ------------------------- | ---------------------------------------- | ---------------------------------------------------------------------- |
-| `developerAuthentication` | **No-op** (JWT header already present)   | Drives a one-time-PIN–style login form, sets `CF_Authorization` cookie |
-| `cloudflareAccess`        | Validates JWT via Cloudflare Access JWKS | Validates the same dev-signed JWT via HMAC                             |
+| Middleware                | Production                               | Local dev                                                                    |
+| ------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `developerAuthentication` | **No-op** (JWT header already present)   | Drives a one-time-PIN–style login form, sets `CF_Authorization` cookie       |
+| `cloudflareAccess`        | Validates JWT via Cloudflare Access JWKS | Validates the same dev-signed JWT via HMAC **when `enableDevTokens` is set** |
 
 ---
 
@@ -231,6 +231,38 @@ app.use(cloudflareAccess({ policies: authPolicies }));
 
 The middleware factories return a `MiddlewareHandler` — pass it directly to `app.use()`.
 
+### 7. Enable Dev Tokens Only in Development (Fail-Closed)
+
+`cloudflareAccess` does **not** verify HS256 developer tokens unless you opt
+in with `enableDevTokens`. It defaults to `false`, so a deployed Worker
+verifies **only** against the Cloudflare Access JWKS and rejects any dev token
+— including one forged with the public, well-known `DEFAULT_DEV_SECRET`. This
+is the fix for the production auth-bypass class of bug: never ship a Worker
+that silently trusts HS256 tokens.
+
+Because the `developerAuthentication` flow issues HS256 tokens in local dev,
+you must enable verification there — gated on a build-time signal that is
+statically `false` in production:
+
+```ts
+// CORRECT — dev verifies HS256; production verifies only real Access JWTs
+app.use(developerAuthentication({ policies: authPolicies }));
+app.use(cloudflareAccess({ policies: authPolicies, enableDevTokens: import.meta.env.DEV }));
+```
+
+```ts
+// WRONG — ships a forgeable bypass: any attacker-signed HS256 token is trusted
+app.use(cloudflareAccess({ policies: authPolicies, enableDevTokens: true }));
+
+// WRONG — dev login flow 401s because the injected dev token is never verified
+app.use(cloudflareAccess({ policies: authPolicies }));
+```
+
+When `enableDevTokens` is `true` without an explicit `devSecret`, the
+middleware logs a one-time warning that it is verifying with the public
+default secret. `DEFAULT_DEV_SECRET` is a **signing** convenience only — never
+a silent verification key.
+
 ---
 
 ## Minimal Working Example
@@ -264,7 +296,9 @@ const authPolicies: PathPolicy[] = [
 
 // Order matters: developerAuthentication FIRST
 app.use(developerAuthentication({ policies: authPolicies }));
-app.use(cloudflareAccess({ policies: authPolicies }));
+// enableDevTokens is fail-closed (default false); gate it on a dev-only
+// signal so production verifies real Access tokens via JWKS only.
+app.use(cloudflareAccess({ policies: authPolicies, enableDevTokens: import.meta.env.DEV }));
 
 app.get("/api/me", (c) => {
   return c.json({ email: c.get("userEmail"), sub: c.get("userSub") });
@@ -331,14 +365,15 @@ responds to unauthenticated requests on protected paths:
 
 ### `CloudflareAccessSettings`
 
-| Property        | Type                  | Default                        | Description                        |
-| --------------- | --------------------- | ------------------------------ | ---------------------------------- |
-| `policies`      | `PathPolicy[]`        | `undefined`                    | Path matching rules                |
-| `defaultAction` | `"block" \| "bypass"` | `"block"`                      | Behavior when no policy matches    |
-| `teamDomain`    | `string`              | `c.env.CLOUDFLARE_TEAM_DOMAIN` | Cloudflare Access team domain      |
-| `audience`      | `string`              | `undefined` (skip check)       | Expected `aud` claim value         |
-| `devSecret`     | `string`              | Built-in dev key               | HMAC secret for verifying dev JWTs |
-| `logger`        | `Logger`              | Console logger                 | Custom logger instance             |
+| Property          | Type                  | Default                        | Description                                                               |
+| ----------------- | --------------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| `policies`        | `PathPolicy[]`        | `undefined`                    | Path matching rules                                                       |
+| `defaultAction`   | `"block" \| "bypass"` | `"block"`                      | Behavior when no policy matches                                           |
+| `teamDomain`      | `string`              | `c.env.CLOUDFLARE_TEAM_DOMAIN` | Cloudflare Access team domain                                             |
+| `audience`        | `string`              | `undefined` (skip check)       | Expected `aud` claim value                                                |
+| `enableDevTokens` | `boolean`             | `false`                        | Opt in to HS256 dev-token verification. Gate on `import.meta.env.DEV`.    |
+| `devSecret`       | `string`              | Built-in dev key               | HMAC secret for verifying dev JWTs. **Ignored unless `enableDevTokens`.** |
+| `logger`          | `Logger`              | Console logger                 | Custom logger instance                                                    |
 
 ---
 
@@ -392,8 +427,13 @@ Incoming request
 
 ### `cloudflareAccess` JWT verification order
 
-1. Try HMAC verification with the dev secret (fast, no network)
-2. If that fails, verify against the Cloudflare Access JWKS endpoint
+1. **Opt-in** (only when `enableDevTokens` is `true`) — try HMAC verification
+   with the dev secret (fast, no network)
+2. Verify against the Cloudflare Access JWKS endpoint
+
+When `enableDevTokens` is unset (the default), step 1 is skipped entirely:
+only JWKS runs, so HS256 dev tokens are rejected. This is fail-closed by
+design — see Critical Setup Rule #7.
 
 | Policy match                        | JWT valid? | Result                              |
 | ----------------------------------- | ---------- | ----------------------------------- |
@@ -639,7 +679,7 @@ const token = await signDevJwt("alice@example.com", { sub: "alice-uuid" });
 
 ### Injecting the token
 
-Pass the signed token as the `Cf-Access-Jwt-Assertion` header. `developerAuthentication` treats this as the production path (no-op) and `cloudflareAccess` validates it via HMAC — no network call, no login redirect.
+Pass the signed token as the `Cf-Access-Jwt-Assertion` header. `developerAuthentication` treats this as the production path (no-op) and `cloudflareAccess` validates it via HMAC — no network call, no login redirect. Because dev-token verification is fail-closed, the `cloudflareAccess` under test **must** be constructed with `enableDevTokens: true` (see the examples below); otherwise the HS256 token is rejected and the request 401s.
 
 ```ts
 const token = await signDevJwt("alice@example.com");
@@ -688,7 +728,8 @@ const authPolicies: PathPolicy[] = [
 function createApp() {
   const app = new Hono<{ Bindings: typeof MOCK_ENV; Variables: AuthVariables }>();
   app.use(developerAuthentication({ policies: authPolicies }));
-  app.use(cloudflareAccess({ policies: authPolicies }));
+  // Tests run in the "dev" environment, so enable HS256 dev-token verification.
+  app.use(cloudflareAccess({ policies: authPolicies, enableDevTokens: true }));
   app.get("/api/me", (c) => c.json({ email: c.get("userEmail"), sub: c.get("userSub") }));
   app.get("/api/version", (c) => c.json({ version: "1.0" }));
   return app;
@@ -809,14 +850,15 @@ test("admin sees controls that viewer does not", async ({ browser }) => {
 
 By default, `signDevJwt` and `cloudflareAccess` both use `DEFAULT_DEV_SECRET`. This is fine for local development but means a token signed in one test suite is accepted by another app using the default secret.
 
-To isolate test suites, pass a custom `devSecret` consistently to both:
+To isolate test suites, pass a custom `devSecret` consistently to both (and
+enable dev tokens so the secret is actually used):
 
 ```ts
 const TEST_SECRET = "my-test-suite-secret";
 
 const token = await signDevJwt("alice@example.com", { secret: TEST_SECRET });
 
-app.use(cloudflareAccess({ policies, devSecret: TEST_SECRET }));
+app.use(cloudflareAccess({ policies, enableDevTokens: true, devSecret: TEST_SECRET }));
 ```
 
 ---
@@ -835,6 +877,8 @@ app.use(cloudflareAccess({ policies, devSecret: TEST_SECRET }));
 | Using `serveStatic` from `hono/cloudflare-workers`                                                      | `serveStatic` reads `c.env.__STATIC_CONTENT` (legacy Workers Sites KV). With `assets.binding`, `__STATIC_CONTENT` is `undefined` — all asset requests return 404                                            | Use `app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw))`                                                                                                                                                      |
 | Assuming `Cf-Access-User` header is set by Cloudflare Access                                            | CF Access sets `Cf-Access-Jwt-Assertion` and `Cf-Access-Authenticated-User-Email` but does **not** set `Cf-Access-User`. The `sub` claim is extracted from the JWT by `cloudflareAccess` middleware         | Use `c.get("userSub")` from context variables, not the header directly                                                                                                                                        |
 | Not setting `CLOUDFLARE_TEAM_DOMAIN` in production                                                      | `cloudflareAccess` cannot fetch the JWKS; all real Access JWTs fail verification                                                                                                                            | Set the var in `wrangler.jsonc` or via a secret                                                                                                                                                               |
+| Shipping `cloudflareAccess({ enableDevTokens: true })` (hardcoded) to production                        | The Worker trusts any HS256 token signed with the public `DEFAULT_DEV_SECRET` → remote auth bypass / identity spoofing                                                                                      | Gate it on a build-time dev signal: `enableDevTokens: import.meta.env.DEV` (statically `false` in the production build)                                                                                       |
+| Omitting `enableDevTokens` while using `developerAuthentication` (or the Vite plugin) in dev            | Dev-token verification is fail-closed by default, so the injected HS256 token is rejected and every dev request 401s                                                                                        | Add `enableDevTokens: import.meta.env.DEV` to `cloudflareAccess()`                                                                                                                                            |
 | Not adding `AuthVariables` to the Hono generic                                                          | `c.get("userEmail")` returns `unknown`                                                                                                                                                                      | `new Hono<{ Bindings: Env; Variables: AuthVariables }>()`                                                                                                                                                     |
 | Checking for the authenticated user on a `authenticate: false` path                                     | `c.get("userEmail")` will be `undefined` on public paths — the middleware skips auth processing entirely                                                                                                    | Only access context vars on protected routes                                                                                                                                                                  |
 | Wrapping middleware in arrow functions: `(c, next) => middleware()(c, next)`                            | Creates a new middleware instance on every request, obscures Hono's type inference, and masks type errors that would catch misconfiguration. Often generated by coding LLMs as a "type fix"                 | Register middleware directly: `app.use(developerAuthentication({ ... }))`. If TypeScript complains, the root cause is likely dual copies of hono (see installation notes) — fix the dependency, not the types |
