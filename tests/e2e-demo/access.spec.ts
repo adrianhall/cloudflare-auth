@@ -1,5 +1,9 @@
 /**
- * End-to-end tests for the Vite + Cloudflare Access demo.
+ * End-to-end tests for the Vite + Cloudflare Access plugin, run against a
+ * dedicated fixture under `tests/e2e-demo/app/` that installs the library
+ * built from CURRENT source (see prepare.mjs). The fixture is intentionally
+ * separate from `example-vite/` so the guard does not drift when the demo
+ * changes for unrelated cosmetic reasons.
  *
  * Two complementary checks against the REAL stack (Vite dev server +
  * @cloudflare/vite-plugin + workerd):
@@ -7,14 +11,13 @@
  *   1. Browser flow — login form → identity rendered by the SPA from
  *      `/api/me` → switch identity → logout.
  *   2. API guard — a direct authenticated request to `/api/me` must
- *      return the identity, proving the plugin's injected
- *      `req.rawHeaders` reach the Worker (the make-or-break detail from
- *      the #10 spike).
+ *      return the identity, proving the plugin's injected `req.rawHeaders`
+ *      reach the Worker.
  */
 
 import { test, expect, request } from "@playwright/test";
 
-import { ALICE_SUB } from "../shared/policies";
+import { ALICE_SUB } from "./app/shared/policies";
 
 const BASE = "http://localhost:5173";
 
@@ -42,7 +45,7 @@ test.describe("Vite Cloudflare Access demo", () => {
     // Back on the SPA, identity is fetched from /api/me.
     await expect(page).toHaveURL(`${BASE}/`);
     await expect(page.getByTestId("identity-email")).toHaveText("alice@example.com");
-    // Alice is pinned to a UUID-style sub in shared/policies.ts.
+    // Alice is pinned to a UUID-style sub in app/shared/policies.ts.
     await expect(page.getByTestId("identity-sub")).toHaveText(ALICE_SUB);
   });
 
@@ -53,6 +56,8 @@ test.describe("Vite Cloudflare Access demo", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await expect(page.getByTestId("identity-email")).toHaveText("bob@example.com");
+    // Bob has no pinned sub, so the SPA renders a fresh random UUID (issue #21).
+    await expect(page.getByTestId("identity-sub")).toHaveText(UUID_RE);
 
     // Log out → next navigation is gated again.
     await page.getByRole("link", { name: "Log out" }).click();

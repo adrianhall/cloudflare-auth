@@ -3,7 +3,9 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["coverage/", "dist/", "node_modules/"] },
+  // The e2e-demo fixture is a self-contained Vite/React/Worker app linted by
+  // its own toolchain; the migrated demo spec lives alongside it.
+  { ignores: ["coverage/", "dist/", "node_modules/", "tests/e2e-demo/"] },
 
   {
     files: ["src/**/*.ts", "tests/**/*.ts"],

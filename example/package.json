@@ -8,7 +8,6 @@
     "build": "vite build",
     "preview": "wrangler dev",
     "typecheck": "tsc --noEmit",
-    "refresh-auth": "cd .. && npm pack --pack-destination example && cd example && npm install ./adrianhall-cloudflare-auth-*.tgz",
     "preprovision": "terraform -chdir=infra init",
     "provision": "terraform -chdir=infra apply -auto-approve",
     "postprovision": "generate-wrangler -cf -i wrangler.prod.jsonc.tpl -o wrangler.prod.jsonc -t infra",

@@ -12,5 +12,8 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["src", "tests", "*.config.ts", "*.config.js"]
+  "include": ["src", "tests", "*.config.ts", "*.config.js"],
+  // The e2e-demo fixture is a self-contained Vite/React/Worker app with its
+  // own deps and tsconfig; it must not be type-checked by the root program.
+  "exclude": ["tests/e2e-demo"]
 }
