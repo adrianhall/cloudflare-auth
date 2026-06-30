@@ -52,10 +52,12 @@ const authPolicies: PathPolicy[] = [
 //    an interactive login flow and injects the same headers.
 app.use(developerAuthentication({ policies: authPolicies }));
 
-// 2. Cloudflare Access middleware validates the JWT (real or dev-issued)
-//    and populates context variables.  Uses the same policies so public
-//    endpoints are not blocked.
-app.use(cloudflareAccess({ policies: authPolicies }));
+// 2. Cloudflare Access middleware validates the JWT and populates context
+//    variables.  Uses the same policies so public endpoints are not blocked.
+//    `enableDevTokens` opts in to HS256 dev-token verification and is
+//    fail-closed by default — gate it on a dev-only signal so production
+//    verifies real Access tokens via JWKS only.
+app.use(cloudflareAccess({ policies: authPolicies, enableDevTokens: import.meta.env.DEV }));
 
 // 3. Handlers can now read the authenticated user.
 app.get("/api/me", (c) => {
@@ -122,18 +124,35 @@ Validates the JWT from either Cloudflare Access or the developer middleware and 
 
 **Verification order** (when JWT validation is performed):
 
-1. Try HMAC verification with the dev secret (fast, in-process).
-2. If that fails, verify against the Cloudflare Access JWKS endpoint.
+1. **Opt-in** — when `enableDevTokens` is `true`, try HMAC verification with
+   the dev secret (fast, in-process).
+2. Verify against the Cloudflare Access JWKS endpoint.
+
+> **🔒 Dev tokens are fail-closed.** `enableDevTokens` defaults to `false`, so
+> a deployed Worker verifies **only** via JWKS and rejects any HS256
+> developer token — including one signed with the public, well-known dev
+> secret. Enable it **only** in local development, gated on a build-time
+> signal that is statically `false` in production:
+>
+> ```ts
+> app.use(cloudflareAccess({ policies, enableDevTokens: import.meta.env.DEV }));
+> ```
+>
+> **Migration:** earlier versions verified dev tokens unconditionally. If you
+> relied on that in local dev (the `developerAuthentication` flow or the Vite
+> plugin), add `enableDevTokens: import.meta.env.DEV` to `cloudflareAccess()`.
+> No change is needed in production.
 
 **Settings — `CloudflareAccessSettings`**
 
-| Property        | Type                  | Default                        | Description                                                   |
-| --------------- | --------------------- | ------------------------------ | ------------------------------------------------------------- |
-| `policies`      | `PathPolicy[]`        | `undefined`                    | Path matching rules (same array as `developerAuthentication`) |
-| `defaultAction` | `"block" \| "bypass"` | `"block"`                      | What to do when no policy matches (see table above)           |
-| `teamDomain`    | `string`              | `c.env.CLOUDFLARE_TEAM_DOMAIN` | Cloudflare Access team domain                                 |
-| `audience`      | `string`              | `undefined` (skip aud check)   | Application Audience Tag for `aud` claim validation           |
-| `devSecret`     | `string`              | Built-in dev key               | HMAC secret for verifying dev JWTs                            |
+| Property          | Type                  | Default                        | Description                                                               |
+| ----------------- | --------------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| `policies`        | `PathPolicy[]`        | `undefined`                    | Path matching rules (same array as `developerAuthentication`)             |
+| `defaultAction`   | `"block" \| "bypass"` | `"block"`                      | What to do when no policy matches (see table above)                       |
+| `teamDomain`      | `string`              | `c.env.CLOUDFLARE_TEAM_DOMAIN` | Cloudflare Access team domain                                             |
+| `audience`        | `string`              | `undefined` (skip aud check)   | Application Audience Tag for `aud` claim validation                       |
+| `enableDevTokens` | `boolean`             | `false`                        | Opt in to HS256 dev-token verification. Gate on `import.meta.env.DEV`.    |
+| `devSecret`       | `string`              | Built-in dev key               | HMAC secret for verifying dev JWTs. **Ignored unless `enableDevTokens`.** |
 
 ## Path Policies
 
@@ -236,11 +255,15 @@ Request ──► developerAuthentication
             ▼
             cloudflareAccess
             │  Read JWT from injected header
-            │  Verify with dev secret (HMAC)
+            │  Verify with dev secret (HMAC) — requires enableDevTokens
             │  Set userEmail + userSub on context
             ▼
             Your handler
 ```
+
+> In dev, `cloudflareAccess` only verifies the HS256 token when
+> `enableDevTokens` is `true` (e.g. `enableDevTokens: import.meta.env.DEV`).
+> Without it the dev token is rejected and the request 401s.
 
 ### Local Development (API routes — `redirect: false`)
 
@@ -473,7 +496,9 @@ import { Hono } from "hono";
 import { cloudflareAccess, type AuthVariables } from "@adrianhall/cloudflare-auth";
 
 const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
-app.use(cloudflareAccess({ policies }));
+// enableDevTokens lets the Worker validate the plugin's HS256 dev token
+// during `vite dev`; it is statically false in the production build.
+app.use(cloudflareAccess({ policies, enableDevTokens: import.meta.env.DEV }));
 app.get("/api/me", (c) => c.json({ email: c.get("userEmail"), sub: c.get("userSub") }));
 export default app;
 ```
@@ -490,8 +515,10 @@ The plugin:
 3. **Injects headers then hands off** — for an authenticated session it
    signs an HS256 dev JWT and sets `cf-access-jwt-assertion` (+
    `cf-access-authenticated-user-email`), then lets the request flow into
-   the Worker, where `cloudflareAccess()` validates it via its HMAC-first
-   path (no network).
+   the Worker, where `cloudflareAccess()` validates it via its HMAC path
+   (no network). This requires `enableDevTokens: import.meta.env.DEV` on the
+   Worker's `cloudflareAccess()` — fail-closed by default, so the production
+   build verifies only real Access tokens via JWKS.
 4. **Passes Vite internals through** untouched (`/@vite`, `/@fs`,
    `/node_modules`, HMR, `/src/`).
 

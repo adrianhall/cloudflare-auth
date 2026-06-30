@@ -171,10 +171,33 @@ export interface CloudflareAccessSettings {
      */
     audience?: string;
     /**
+     * Enable HS256 developer-token verification.
+     *
+     * **Default `false` (fail-closed).**  When `false`, {@link cloudflareAccess}
+     * verifies the JWT **only** against the Cloudflare Access JWKS — a
+     * developer-signed HS256 token (including one signed with the public
+     * {@link DEFAULT_DEV_SECRET}) is rejected.  This prevents a deployed
+     * Worker from silently trusting forgeable dev tokens.
+     *
+     * Enable it **only** in local development, gated on a build-time signal
+     * that is statically `false` in production:
+     *
+     * ```ts
+     * app.use(cloudflareAccess({ policies, enableDevTokens: import.meta.env.DEV }));
+     * ```
+     *
+     * When enabled without an explicit {@link devSecret}, the middleware logs
+     * a one-time warning that it is verifying with the public default secret.
+     */
+    enableDevTokens?: boolean;
+    /**
      * HMAC secret for validating developer-generated JWTs.
      *
-     * Must match the `devSecret` used by {@link developerAuthentication}.
-     * Defaults to the same well-known key.
+     * **Ignored unless {@link enableDevTokens} is `true`.**  Must match the
+     * `devSecret` used by {@link developerAuthentication} (or the Vite
+     * plugin).  When dev tokens are enabled and this is omitted, the
+     * well-known {@link DEFAULT_DEV_SECRET} is used and a one-time warning is
+     * logged — never rely on that for production security.
      */
     devSecret?: string;
     /**

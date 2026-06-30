@@ -38,7 +38,11 @@ function createApp() {
   const app = new Hono<{ Bindings: typeof MOCK_ENV; Variables: AuthVariables }>();
 
   app.use(developerAuthentication({ policies: authPolicies, logger: silentLogger }));
-  app.use(cloudflareAccess({ policies: authPolicies, logger: silentLogger }));
+  // enableDevTokens simulates the local-dev environment, where the dev
+  // login flow issues HS256 tokens that cloudflareAccess must verify.
+  app.use(
+    cloudflareAccess({ policies: authPolicies, enableDevTokens: true, logger: silentLogger })
+  );
 
   app.get("/api/version", (c) => c.json({ version: "1.0" }));
   app.get("/api/me", (c) => c.json({ email: c.get("userEmail"), sub: c.get("userSub") }));
@@ -137,7 +141,14 @@ describe("auth integration (both middleware together)", () => {
     ];
 
     app.use(developerAuthentication({ policies, logger: silentLogger }));
-    app.use(cloudflareAccess({ policies, defaultAction: "bypass", logger: silentLogger }));
+    app.use(
+      cloudflareAccess({
+        policies,
+        defaultAction: "bypass",
+        enableDevTokens: true,
+        logger: silentLogger
+      })
+    );
 
     app.get("/api/open", (c) => c.json({ email: c.get("userEmail") ?? null }));
     app.get("/api/secret", (c) => c.json({ email: c.get("userEmail") }));
@@ -169,7 +180,9 @@ describe("auth integration (both middleware together)", () => {
       const app = new Hono<{ Bindings: typeof MOCK_ENV; Variables: AuthVariables }>();
 
       app.use(developerAuthentication({ policies: mixedPolicies, logger: silentLogger }));
-      app.use(cloudflareAccess({ policies: mixedPolicies, logger: silentLogger }));
+      app.use(
+        cloudflareAccess({ policies: mixedPolicies, enableDevTokens: true, logger: silentLogger })
+      );
 
       app.get("/api/version", (c) => c.json({ version: "1.0" }));
       app.get("/api/me", (c) => c.json({ email: c.get("userEmail"), sub: c.get("userSub") }));

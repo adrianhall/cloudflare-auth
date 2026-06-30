@@ -32,8 +32,14 @@ import type { CloudflareAccessSettings } from "./types.js";
  *
  * **Verification order** (when JWT validation is performed):
  *
- * 1. Try HMAC verification with the dev secret (fast, in-process).
- * 2. Fall back to the remote JWKS endpoint for the team domain.
+ * 1. *(Opt-in)* When `enableDevTokens` is `true`, try HMAC verification
+ *    with the dev secret (fast, in-process).
+ * 2. Verify against the remote JWKS endpoint for the team domain.
+ *
+ * Developer-token verification is **fail-closed**: it is disabled by
+ * default so a deployed Worker never silently trusts a forgeable HS256
+ * token signed with the public {@link DEFAULT_DEV_SECRET}.  Enable it only
+ * in local development (e.g. `enableDevTokens: import.meta.env.DEV`).
  */
 export declare function cloudflareAccess(settings?: CloudflareAccessSettings): MiddlewareHandler;
 //# sourceMappingURL=cloudflare-access.d.ts.map

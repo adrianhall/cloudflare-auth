@@ -52,6 +52,15 @@ bundle.
   `[A-Za-z0-9-]` subject validators downstream.
 - `userSub` is derived from the JWT `sub` claim by `cloudflareAccess`, not from
   a header.
+- `cloudflareAccess` dev-token (HS256) verification is **fail-closed**:
+  `enableDevTokens` defaults to `false`, so a deployed Worker verifies only
+  via JWKS and rejects tokens signed with the public `DEFAULT_DEV_SECRET`.
+  Enable it for local dev only, gated on a build-time signal that is
+  statically `false` in production (`enableDevTokens: import.meta.env.DEV`).
+  When enabled without an explicit `devSecret`, the middleware logs a
+  one-time warning. `DEFAULT_DEV_SECRET` is a signing convenience only —
+  never a silent verification key. Do not re-enable unconditional dev-token
+  verification.
 - Only `jose` is a runtime dependency; `hono`/`vite` are peers (`vite`
   optional). Avoid adding dependencies.
 - When changing behavior, update `tests/`, `README.md`, and the relevant

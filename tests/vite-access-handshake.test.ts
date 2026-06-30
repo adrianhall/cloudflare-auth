@@ -78,7 +78,9 @@ function requestFromRawHeaders(req: IncomingMessage): Request {
 
 function createWorker() {
   const app = new Hono<{ Bindings: typeof MOCK_ENV; Variables: AuthVariables }>();
-  app.use(cloudflareAccess({ policies, logger: silentLogger }));
+  // The Worker under `vite dev` enables dev tokens (e.g. via
+  // import.meta.env.DEV) so the plugin's HS256 token validates over HMAC.
+  app.use(cloudflareAccess({ policies, enableDevTokens: true, logger: silentLogger }));
   app.get("/api/me", (c) => c.json({ email: c.get("userEmail"), sub: c.get("userSub") }));
   return app;
 }

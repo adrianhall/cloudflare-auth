@@ -34,15 +34,18 @@ through the Worker with `run_worker_first: true`.
 The **Vite plugin** approach solves it differently: a dev-only connect
 middleware emulates the Access edge _in front of_ `@cloudflare/vite-plugin`.
 
-|                     | Runtime middleware (`cloudflare-auth`)             | Vite plugin (`cloudflare-auth-vite`)               |
-| ------------------- | -------------------------------------------------- | -------------------------------------------------- |
-| Worker dev code     | `developerAuthentication()` + `cloudflareAccess()` | **`cloudflareAccess()` only**                      |
-| `wrangler.jsonc`    | `run_worker_first: true` (all requests via Worker) | **no `run_worker_first`** (assets served directly) |
-| Where dev auth runs | inside the Worker                                  | Vite connect layer (`configureServer`)             |
-| Best for            | any Worker + assets setup                          | Vite + `@cloudflare/vite-plugin` SPA apps          |
+|                     | Runtime middleware (`cloudflare-auth`)             | Vite plugin (`cloudflare-auth-vite`)                                  |
+| ------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| Worker dev code     | `developerAuthentication()` + `cloudflareAccess()` | **`cloudflareAccess({ enableDevTokens: import.meta.env.DEV })` only** |
+| `wrangler.jsonc`    | `run_worker_first: true` (all requests via Worker) | **no `run_worker_first`** (assets served directly)                    |
+| Where dev auth runs | inside the Worker                                  | Vite connect layer (`configureServer`)                                |
+| Best for            | any Worker + assets setup                          | Vite + `@cloudflare/vite-plugin` SPA apps                             |
 
 **The Worker is environment-agnostic and identical to production: it only
-ever runs `cloudflareAccess()`.**
+ever runs `cloudflareAccess()`.** The one dev-vs-prod knob is
+`enableDevTokens: import.meta.env.DEV` — a single boolean that Vite resolves
+statically (`true` under `vite dev`, `false` in the production build), so the
+deployed Worker verifies only real Access tokens via JWKS.
 
 ---
 
@@ -119,7 +122,9 @@ import { cloudflareAccess, type AuthVariables } from "@adrianhall/cloudflare-aut
 import { authPolicies } from "../shared/policies";
 
 const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
-app.use(cloudflareAccess({ policies: authPolicies }));
+// enableDevTokens lets the Worker validate the plugin's HS256 token during
+// `vite dev`; it is statically false in the production build (fail-closed).
+app.use(cloudflareAccess({ policies: authPolicies, enableDevTokens: import.meta.env.DEV }));
 app.get("/api/version", (c) => c.json({ version: "1.0.0" }));
 app.get("/api/me", (c) => c.json({ email: c.get("userEmail"), sub: c.get("userSub") }));
 export default app;
@@ -156,11 +161,27 @@ connect middleware synchronously in the `configureServer` hook body, so
 it always runs ahead of `@cloudflare/vite-plugin`'s request→`workerd`
 dispatch handler (registered from a post hook).
 
-### 2. The Worker uses ONLY `cloudflareAccess()`
+### 2. The Worker uses ONLY `cloudflareAccess()` — with the dev-token gate
 
 Do **not** add `developerAuthentication()` when using the plugin. The
 plugin replaces it. Adding both means two layers try to drive the dev
 login flow.
+
+The plugin signs an **HS256** dev JWT, and `cloudflareAccess()` verifies
+HS256 tokens **only** when `enableDevTokens` is `true` (fail-closed by
+default). Gate it on `import.meta.env.DEV` so `vite dev` works while the
+production build verifies only real Access tokens via JWKS:
+
+```ts
+// CORRECT
+app.use(cloudflareAccess({ policies, enableDevTokens: import.meta.env.DEV }));
+
+// WRONG — vite dev 401s: the plugin's HS256 token is never verified
+app.use(cloudflareAccess({ policies }));
+
+// WRONG — ships a forgeable bypass to production
+app.use(cloudflareAccess({ policies, enableDevTokens: true }));
+```
 
 ### 3. Do NOT add `run_worker_first`
 
@@ -242,15 +263,17 @@ demo and its `e2e/access.spec.ts`.
 
 ## Anti-Patterns
 
-| Anti-pattern                                                         | Problem                                                                                                                 | Fix                                                                                |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `cloudflareAccessPlugin()` placed **after** `cloudflare()`           | The request is dispatched into `workerd` before headers are injected; the Worker sees no JWT and returns 401            | Put `cloudflareAccessPlugin()` first in the `plugins` array                        |
-| Using `developerAuthentication()` **and** `cloudflareAccessPlugin()` | Two layers drive the dev login; redundant and confusing                                                                 | With the Vite plugin, the Worker uses **only** `cloudflareAccess()`                |
-| Adding `run_worker_first: true` because of the plugin                | Forces all assets through the Worker, defeating the "assets bypass the Worker" model the plugin relies on               | Omit `run_worker_first`; the plugin gates navigations itself                       |
-| Injecting onto `req.headers` only (not `req.rawHeaders`)             | `@cloudflare/vite-plugin` builds the dispatched `Request` from `req.rawHeaders`, so the header never reaches the Worker | Push onto `req.rawHeaders` (the plugin does this; do not "fix" it to headers-only) |
-| Not pinning `@cloudflare/vite-plugin`                                | A future version could change how it reads headers, silently breaking dev auth                                          | Pin the version and keep the real-stack e2e guard                                  |
-| Mismatched `devSecret` between plugin and `cloudflareAccess()`       | Plugin signs HS256 with one secret; Worker's HMAC verification uses another → 401                                       | Use the same `devSecret` (or rely on the shared default)                           |
-| Different `policies` arrays for plugin vs Worker                     | Dev and prod disagree on which paths are protected                                                                      | Define one `PathPolicy[]` (e.g. in `shared/`) and import it in both                |
-| Adding `/cdn-cgi/access/*` to `policies`                             | The plugin owns those paths; a policy entry can shadow them                                                             | Leave `/cdn-cgi/access/*` out of `policies`                                        |
-| Expecting the plugin to run in production                            | It is `apply: "serve"` only                                                                                             | In production, real Cloudflare Access injects the headers; no plugin needed        |
-| Importing `cloudflareAccessPlugin` from the package root             | It is a dev-only subpath export and would pull `vite` types into the Worker bundle                                      | Import from `@adrianhall/cloudflare-auth/vite`                                     |
+| Anti-pattern                                                         | Problem                                                                                                                     | Fix                                                                                |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `cloudflareAccessPlugin()` placed **after** `cloudflare()`           | The request is dispatched into `workerd` before headers are injected; the Worker sees no JWT and returns 401                | Put `cloudflareAccessPlugin()` first in the `plugins` array                        |
+| Using `developerAuthentication()` **and** `cloudflareAccessPlugin()` | Two layers drive the dev login; redundant and confusing                                                                     | With the Vite plugin, the Worker uses **only** `cloudflareAccess()`                |
+| Omitting `enableDevTokens` on the Worker's `cloudflareAccess()`      | Dev-token verification is fail-closed by default, so the plugin's HS256 token is rejected and every `vite dev` request 401s | Set `enableDevTokens: import.meta.env.DEV` on `cloudflareAccess()`                 |
+| Hardcoding `cloudflareAccess({ enableDevTokens: true })`             | The production Worker trusts any HS256 token signed with the public `DEFAULT_DEV_SECRET` → remote auth bypass               | Gate on `import.meta.env.DEV` so it is statically `false` in the production build  |
+| Adding `run_worker_first: true` because of the plugin                | Forces all assets through the Worker, defeating the "assets bypass the Worker" model the plugin relies on                   | Omit `run_worker_first`; the plugin gates navigations itself                       |
+| Injecting onto `req.headers` only (not `req.rawHeaders`)             | `@cloudflare/vite-plugin` builds the dispatched `Request` from `req.rawHeaders`, so the header never reaches the Worker     | Push onto `req.rawHeaders` (the plugin does this; do not "fix" it to headers-only) |
+| Not pinning `@cloudflare/vite-plugin`                                | A future version could change how it reads headers, silently breaking dev auth                                              | Pin the version and keep the real-stack e2e guard                                  |
+| Mismatched `devSecret` between plugin and `cloudflareAccess()`       | Plugin signs HS256 with one secret; Worker's HMAC verification uses another → 401                                           | Use the same `devSecret` (or rely on the shared default)                           |
+| Different `policies` arrays for plugin vs Worker                     | Dev and prod disagree on which paths are protected                                                                          | Define one `PathPolicy[]` (e.g. in `shared/`) and import it in both                |
+| Adding `/cdn-cgi/access/*` to `policies`                             | The plugin owns those paths; a policy entry can shadow them                                                                 | Leave `/cdn-cgi/access/*` out of `policies`                                        |
+| Expecting the plugin to run in production                            | It is `apply: "serve"` only                                                                                                 | In production, real Cloudflare Access injects the headers; no plugin needed        |
+| Importing `cloudflareAccessPlugin` from the package root             | It is a dev-only subpath export and would pull `vite` types into the Worker bundle                                          | Import from `@adrianhall/cloudflare-auth/vite`                                     |

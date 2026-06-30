@@ -150,7 +150,16 @@ app.use("*", async (c, next) => {
 // ---------------------------------------------------------------------------
 
 app.use(developerAuthentication({ policies: authPolicies, logger: devAuthLogger }));
-app.use(cloudflareAccess({ policies: authPolicies, logger: cfAccessLogger }));
+// enableDevTokens is gated on import.meta.env.DEV: true under `vite dev`,
+// statically false in the production build — so the deployed Worker only
+// ever verifies real Access tokens via JWKS (fail-closed).
+app.use(
+  cloudflareAccess({
+    policies: authPolicies,
+    enableDevTokens: import.meta.env.DEV,
+    logger: cfAccessLogger
+  })
+);
 
 // ---------------------------------------------------------------------------
 // 3) Public routes
