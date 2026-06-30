@@ -539,10 +539,14 @@ The plugin:
 > middleware with `enforce: "pre"` so it runs ahead of the plugin's
 > dispatch handler. Because this relies on an internal detail of
 > `@cloudflare/vite-plugin`, **pin that dependency** and rely on the
-> demo's e2e guard (`npm run test:e2e:demo`) to catch regressions.
+> e2e guard (`npm run test:e2e:demo`) to catch regressions. That guard
+> lives in
+> [`tests/e2e-demo/`](https://github.com/adrianhall/cloudflare-auth/tree/main/tests/e2e-demo)
+> and builds the library from the current source on every run.
 
 A complete C3-scaffolded demo lives in
-[`example-vite/`](https://github.com/adrianhall/cloudflare-auth/tree/main/example-vite).
+[`example-vite/`](https://github.com/adrianhall/cloudflare-auth/tree/main/example-vite)
+(it installs the published library via a GitHub tag, like a consumer).
 
 ```bash
 cd example-vite

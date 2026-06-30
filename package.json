@@ -49,7 +49,6 @@
     "test:a11y": "vitest run --project a11y",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "pretest:e2e:demo": "npm --prefix example-vite run refresh-auth",
     "test:e2e:demo": "playwright test --config playwright.demo.config.ts",
     "prepare": "husky || true"
   },

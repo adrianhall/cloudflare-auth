@@ -257,7 +257,9 @@ headers.
   `APIRequestContext` request.
 
 See the [`example-vite/`](https://github.com/adrianhall/cloudflare-auth/tree/main/example-vite)
-demo and its `e2e/access.spec.ts`.
+demo (a runnable consumer-style reference) and the real-stack guard in
+[`tests/e2e-demo/`](https://github.com/adrianhall/cloudflare-auth/tree/main/tests/e2e-demo),
+whose `access.spec.ts` runs against a fixture built from the current source.
 
 ---
 

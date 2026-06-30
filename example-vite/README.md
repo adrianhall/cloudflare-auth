@@ -39,19 +39,18 @@ the SPA, which shows your email and subject fetched from `/api/me`. Use
 The policies are defined once in [`shared/policies.ts`](./shared/policies.ts)
 and shared by the plugin and the Worker.
 
-## Using your local checkout of the library
+## Installing the library
 
-This demo installs the library from a packed tarball under `vendor/` so
-it always reflects your local `src/`. After changing the library, refresh
-it with:
-
-```bash
-npm run refresh-auth   # rebuilds + repacks ../ and reinstalls the tarball
-```
+This demo installs `@adrianhall/cloudflare-auth` from a GitHub release tag —
+exactly how a consumer installs it (see `package.json`). It is a runnable
+reference, not a test harness.
 
 ## End-to-end tests
 
-The repo root runs this demo under Playwright (real Vite + workerd):
+The library's real-stack e2e guard (Vite + `@cloudflare/vite-plugin` +
+workerd) does **not** run against this demo. It lives in
+[`tests/e2e-demo/`](../tests/e2e-demo) and builds the library from the
+current source on every run:
 
 ```bash
 npm run test:e2e:demo   # from the repository root

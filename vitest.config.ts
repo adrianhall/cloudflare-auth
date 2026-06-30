@@ -21,7 +21,10 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["tests/**/*.test.ts"],
-          exclude: ["tests/a11y/**"]
+          // The e2e-demo fixture installs its own node_modules (full of
+          // third-party *.test.ts files); keep the default node_modules/dist
+          // exclusions since specifying `exclude` overrides Vitest's defaults.
+          exclude: ["tests/a11y/**", "tests/e2e-demo/**", "**/node_modules/**", "**/dist/**"]
         }
       },
       // a11y project: jsdom environment for axe-core structural scans

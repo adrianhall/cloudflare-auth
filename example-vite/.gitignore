@@ -29,8 +29,3 @@ dist-ssr
 !.dev.vars.example
 .env*
 !.env.example
-
-# Vendored local build of @adrianhall/cloudflare-auth.
-# Committed so the demo installs reproducibly; refresh with `npm run refresh-auth`.
-# (Re-includes the file that the repo-root .gitignore excludes via "*.tgz".)
-!vendor/adrianhall-cloudflare-auth.tgz

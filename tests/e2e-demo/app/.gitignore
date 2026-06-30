@@ -1,0 +1,11 @@
+# Everything in this fixture is generated on each `npm run test:e2e:demo`
+# run by tests/e2e-demo/prepare.mjs (build → pack → install). Nothing here
+# is committed, so the working tree stays clean (issue #20).
+node_modules/
+.artifact/
+dist/
+.vite/
+.wrangler/
+package-lock.json
+*.tgz
+*.tsbuildinfo

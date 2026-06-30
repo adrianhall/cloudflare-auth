@@ -26,8 +26,13 @@ so a Worker can keep ONLY `cloudflareAccess()`.
 - `src/vite.ts` + `src/vite-login-page.ts` — dev Vite plugin (`DevLoginUser`).
 - `src/testing.ts` — `@adrianhall/cloudflare-auth/testing` subpath.
 - `tests/` — Vitest (`unit` + `a11y` projects) and Playwright `e2e`.
+- `tests/e2e-demo/` — Playwright real-stack guard for `./vite`: a
+  self-contained Vite/Worker/SPA fixture under `app/` that `prepare.mjs`
+  builds from current source (build → `npm pack` → install) on every run;
+  all generated artifacts are gitignored. Excluded from root `tsc`/eslint.
 - `skills/**/SKILL.md` — agent skills; keep in sync with behavior changes.
-- `example/`, `example-vite/` — runnable demos.
+- `example/`, `example-vite/` — runnable demos (install the published
+  library via a GitHub tag, like a consumer; not the e2e guard).
 - `dist/` — build output; never edit by hand (`npm run build` regenerates).
 
 ## Subpath exports
@@ -41,7 +46,8 @@ bundle.
 - `npm run check` — prettier + types + eslint + unit tests (run before done).
 - `npm run test:unit` — unit tests only.
 - `npm run build` — `tsc` to `dist/`.
-- `npm run check:full` — adds a11y + e2e (e2e demo rebuilds `example-vite`).
+- `npm run check:full` — adds a11y + e2e (the e2e demo rebuilds the library
+  from source into the `tests/e2e-demo` fixture).
 
 ## Conventions
 

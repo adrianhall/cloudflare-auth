@@ -1,0 +1,23 @@
+/**
+ * Minimal Wrangler config for the e2e demo fixture.
+ *
+ * Deliberately NO "run_worker_first": static assets are served directly by
+ * the asset layer; only /api/* reaches the Worker. Dev login gating is
+ * handled entirely by cloudflareAccessPlugin() in vite.config.ts.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-auth-e2e-demo",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-06-16",
+  "compatibility_flags": ["nodejs_compat"],
+  // In production this would be your real Access team domain so
+  // cloudflareAccess() can fetch the JWKS. In dev it is unused: the plugin's
+  // HS256 token is validated via HMAC (no network).
+  "vars": {
+    "CLOUDFLARE_TEAM_DOMAIN": "example.cloudflareaccess.com"
+  },
+  "assets": {
+    "not_found_handling": "single-page-application"
+  }
+}
