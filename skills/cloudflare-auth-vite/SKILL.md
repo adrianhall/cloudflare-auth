@@ -56,7 +56,7 @@ using a release **tag** (this project tags every release; never install
 from `#main`):
 
 ```bash
-npm install github:adrianhall/cloudflare-auth#1.2.0 hono
+npm install github:adrianhall/cloudflare-auth#1.3.0 hono
 ```
 
 Peer dependencies: `hono ^4.12.0` (Worker) and `vite ^8.0.0` (dev only,

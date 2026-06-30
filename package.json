@@ -1,6 +1,6 @@
 {
   "name": "@adrianhall/cloudflare-auth",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Hono middleware for Cloudflare Access authentication with local development support",
   "license": "MIT",
   "author": "Adrian Hall",
