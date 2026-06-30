@@ -105,7 +105,9 @@ describe("auth integration (both middleware together)", () => {
     expect(authedRes.status).toBe(200);
     const body = (await authedRes.json()) as { email: string; sub: string };
     expect(body.email).toBe("player@example.com");
-    expect(body.sub).toBe("dev-player@example.com");
+    // The login flow mints a UUID subject (not an email-derived value).
+    expect(body.sub).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(body.sub).not.toContain("@");
   });
 
   it("passes through when real Cloudflare Access headers are present", async () => {

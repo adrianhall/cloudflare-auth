@@ -88,4 +88,11 @@ export declare function cloudflareAccessPlugin(options?: CloudflareAccessPluginO
  * objects without booting a real Vite server.
  */
 export declare function createAccessDevMiddleware(options?: CloudflareAccessPluginOptions): Connect.NextHandleFunction;
+/**
+ * Returns a `value` or the default value if not set
+ * @param value the source value
+ * @param defaultValue the default value
+ * @returns the `value` or default value if `value` is not set
+ */
+export declare function valueOrDefault<T>(value: T | undefined | null, defaultValue: T): T;
 //# sourceMappingURL=vite.d.ts.map

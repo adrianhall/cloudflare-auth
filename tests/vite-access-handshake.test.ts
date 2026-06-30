@@ -85,7 +85,7 @@ function createWorker() {
 
 describe("vite plugin → cloudflareAccess() handshake", () => {
   it("an authenticated session reaches the Worker and validates via HMAC", async () => {
-    const token = await signDevJwt("alice@example.com");
+    const token = await signDevJwt("alice@example.com", { sub: "alice-uuid" });
     const cookie = buildCookieHeader(token, false).split(";")[0]; // CF_Authorization=<token>
     expect(cookie.startsWith(`${COOKIE_NAME}=`)).toBe(true);
 
@@ -101,7 +101,7 @@ describe("vite plugin → cloudflareAccess() handshake", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { email: string; sub: string };
     expect(body.email).toBe("alice@example.com");
-    expect(body.sub).toBe("dev-alice@example.com");
+    expect(body.sub).toBe("alice-uuid");
   });
 
   it("an unauthenticated API request is rejected by the Worker (401)", async () => {

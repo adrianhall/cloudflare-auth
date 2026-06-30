@@ -617,19 +617,25 @@ signDevJwt(
   options?: {
     secret?: string;   // default: DEFAULT_DEV_SECRET
     lifetime?: number; // default: 86400 (24 h), in seconds
+    sub?: string;      // default: a generated UUID (used verbatim when provided)
   }
 ): Promise<string>
 ```
 
-**Derived claims** — these are set automatically and cannot be overridden:
+**Claims:**
 
-| Claim  | Value                  |
-| ------ | ---------------------- |
-| `sub`  | `"dev-" + email`       |
-| `iss`  | `"dev-authentication"` |
-| `type` | `"dev"`                |
+| Claim  | Value                                                                |
+| ------ | -------------------------------------------------------------------- |
+| `sub`  | `options.sub` verbatim, else a generated **UUID** (CF-Access-shaped) |
+| `iss`  | `"dev-authentication"` (set automatically)                           |
+| `type` | `"dev"` (set automatically)                                          |
 
-So for `signDevJwt("alice@example.com")`, `c.get("userSub")` in your handler will be `"dev-alice@example.com"`.
+The default `sub` is a random UUID rather than an email-derived value, so it satisfies strict downstream subject validators (e.g. `[A-Za-z0-9-]`) and resembles a real Cloudflare Access `sub`. When a test asserts an exact subject, pass `sub` explicitly:
+
+```ts
+const token = await signDevJwt("alice@example.com", { sub: "alice-uuid" });
+// c.get("userSub") === "alice-uuid"
+```
 
 ### Injecting the token
 
@@ -698,7 +704,8 @@ describe("API auth", () => {
 
   it("returns the authenticated user for a valid token", async () => {
     const app = createApp();
-    const token = await signDevJwt("alice@example.com");
+    // Pin `sub` for a stable assertion; omit it to get a generated UUID.
+    const token = await signDevJwt("alice@example.com", { sub: "alice-uuid" });
 
     const res = await app.fetch(
       new Request("http://localhost/api/me", {
@@ -710,7 +717,7 @@ describe("API auth", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { email: string; sub: string };
     expect(body.email).toBe("alice@example.com");
-    expect(body.sub).toBe("dev-alice@example.com");
+    expect(body.sub).toBe("alice-uuid");
   });
 
   it("allows anonymous access to a public route", async () => {
@@ -843,7 +850,7 @@ Available for integration tests, E2E tests, and advanced flows:
 
 ```ts
 import {
-  signDevJwt, // Sign a dev JWT (email, options)
+  signDevJwt, // Sign a dev JWT (email, { secret?, lifetime?, sub? })
   buildCookieHeader, // Build a Set-Cookie header value for a JWT
   clearCookieHeader, // Build a Set-Cookie header that clears the cookie
   JWT_HEADER, // "cf-access-jwt-assertion"

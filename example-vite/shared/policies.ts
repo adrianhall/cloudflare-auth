@@ -17,8 +17,14 @@ export const authPolicies: PathPolicy[] = [
   { pattern: /^\/.*/, authenticate: true }
 ];
 
-/** Selectable identities shown on the dev login form. */
+/**
+ * Selectable identities shown on the dev login form.
+ *
+ * `sub` is optional. When pinned (as for Alice below) the identity gets a
+ * stable, realistic UUID-style subject across logins; when omitted (Bob) a
+ * fresh UUID is generated each time that identity signs in.
+ */
 export const devUsers = [
-  { email: "alice@example.com", name: "Alice Admin" },
+  { email: "alice@example.com", name: "Alice Admin", sub: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed" },
   { email: "bob@example.com", name: "Bob Viewer" }
 ];

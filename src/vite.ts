@@ -154,9 +154,9 @@ export function createAccessDevMiddleware(
   options: CloudflareAccessPluginOptions = {}
 ): Connect.NextHandleFunction {
   const policies = options.policies;
-  const devSecret = options.devSecret ?? DEFAULT_DEV_SECRET;
-  const users = options.users ?? [];
-  const loginPath = options.loginPath ?? DEFAULT_LOGIN_PATH;
+  const devSecret = valueOrDefault(options.devSecret, DEFAULT_DEV_SECRET);
+  const users = valueOrDefault(options.users, []);
+  const loginPath = valueOrDefault(options.loginPath, DEFAULT_LOGIN_PATH);
   const tokenLifetime = options.tokenLifetime;
 
   return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction): void => {
@@ -246,7 +246,10 @@ export function createAccessDevMiddleware(
       return;
     }
 
-    const token = await signDevJwt(email, { secret: devSecret, lifetime: tokenLifetime });
+    // Pin the subject for a configured identity (stable, realistic sub);
+    // free-text / unknown emails fall back to a generated UUID.
+    const sub = users.find((u) => u.email === email)?.sub;
+    const token = await signDevJwt(email, { secret: devSecret, lifetime: tokenLifetime, sub });
     res.setHeader("Set-Cookie", buildCookieHeader(token, isSecure(req)));
     redirectTo(res, redirect);
   }
@@ -317,13 +320,14 @@ function buildIdentity(email: string, sub: string, name?: string): Record<string
 // ---------------------------------------------------------------------------
 
 function getPathname(req: IncomingMessage): string {
-  const raw = req.url ?? "/";
+  const raw = valueOrDefault(req.url, "/");
   const queryIndex = raw.indexOf("?");
   return queryIndex === -1 ? raw : raw.slice(0, queryIndex);
 }
 
 function getQueryParam(req: IncomingMessage, key: string): string | undefined {
-  const url = new URL(req.url ?? "/", "http://localhost");
+  const path = valueOrDefault(req.url, "/");
+  const url = new URL(path, "http://localhost");
   return url.searchParams.get(key) ?? undefined;
 }
 
@@ -344,7 +348,7 @@ function isNavigation(req: IncomingMessage): boolean {
     return fetchMode === "navigate";
   }
   const accept = headerValue(req, "accept");
-  return accept ? accept.includes("text/html") : false;
+  return valueOrDefault(accept?.includes("text/html"), false);
 }
 
 function isSecure(req: IncomingMessage): boolean {
@@ -403,4 +407,14 @@ function redirectTo(res: ServerResponse, location: string): void {
 
 function redirectToLogin(res: ServerResponse, loginPath: string, pathname: string): void {
   redirectTo(res, `${loginPath}?redirect=${encodeURIComponent(pathname)}`);
+}
+
+/**
+ * Returns a `value` or the default value if not set
+ * @param value the source value
+ * @param defaultValue the default value
+ * @returns the `value` or default value if `value` is not set
+ */
+export function valueOrDefault<T>(value: T | undefined | null, defaultValue: T): T {
+  return value ?? defaultValue;
 }

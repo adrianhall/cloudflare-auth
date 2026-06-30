@@ -28,10 +28,19 @@ export declare const USER_HEADER = "cf-access-user";
  *
  * The `type` claim is set to `"dev"` so that the verification layer can
  * distinguish locally-issued tokens from real Access tokens.
+ *
+ * @param email   - The user's email address (becomes the `email` claim).
+ * @param options - Optional overrides:
+ *   - `secret`   — HMAC signing secret (default {@link DEFAULT_DEV_SECRET}).
+ *   - `lifetime` — Token lifetime in seconds (default `86400` / 24 h).
+ *   - `sub`      — Subject claim.  When provided it is used **verbatim**;
+ *     when omitted a random UUID is generated (matching the shape of a
+ *     real Cloudflare Access `sub`) instead of an email-derived value.
  */
 export declare function signDevJwt(email: string, options?: {
     secret?: string;
     lifetime?: number;
+    sub?: string;
 }): Promise<string>;
 /** Result of a successful JWT verification. */
 export interface VerifiedToken {

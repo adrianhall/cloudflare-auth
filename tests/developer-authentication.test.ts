@@ -192,7 +192,7 @@ describe("developerAuthentication middleware", () => {
 
   describe("cookie → header injection", () => {
     it("injects CF Access headers when the cookie carries a valid JWT", async () => {
-      const token = await signDevJwt("injected@example.com");
+      const token = await signDevJwt("injected@example.com", { sub: "injected-uuid" });
       const app = createApp();
 
       const res = await app.request(`${BASE}/api/test`, {
@@ -203,7 +203,8 @@ describe("developerAuthentication middleware", () => {
       const body = (await res.json()) as Record<string, string | null>;
       expect(body.jwtHeader).toBe(token);
       expect(body.emailHeader).toBe("injected@example.com");
-      expect(body.userHeader).toBe("dev-injected@example.com");
+      // The Cf-Access-User header carries the JWT sub verbatim.
+      expect(body.userHeader).toBe("injected-uuid");
     });
 
     it("redirects to login and clears cookie when cookie JWT is malformed", async () => {

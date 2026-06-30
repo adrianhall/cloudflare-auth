@@ -40,16 +40,36 @@ function secretToBytes(secret) {
 // Sign (developer mode only)
 // ---------------------------------------------------------------------------
 /**
+ * Generate a subject identifier for a developer-signed JWT.
+ *
+ * Returns a random UUID so that the `sub` claim matches the shape of a
+ * real Cloudflare Access subject (a UUID) and satisfies strict
+ * downstream validators (e.g. `[A-Za-z0-9-]`).  Real Access subjects are
+ * stable per-user; dev subjects are stable for the life of an issued
+ * token (and can be pinned via the `sub` option).
+ */
+function generateDevSub() {
+    return crypto.randomUUID();
+}
+/**
  * Create a signed JWT that mimics a Cloudflare Access token.
  *
  * The `type` claim is set to `"dev"` so that the verification layer can
  * distinguish locally-issued tokens from real Access tokens.
+ *
+ * @param email   - The user's email address (becomes the `email` claim).
+ * @param options - Optional overrides:
+ *   - `secret`   — HMAC signing secret (default {@link DEFAULT_DEV_SECRET}).
+ *   - `lifetime` — Token lifetime in seconds (default `86400` / 24 h).
+ *   - `sub`      — Subject claim.  When provided it is used **verbatim**;
+ *     when omitted a random UUID is generated (matching the shape of a
+ *     real Cloudflare Access `sub`) instead of an email-derived value.
  */
 export async function signDevJwt(email, options = {}) {
     const secret = options.secret ?? DEFAULT_DEV_SECRET;
     const lifetime = options.lifetime ?? 86_400; // 24 h
     const now = Math.floor(Date.now() / 1000);
-    const sub = `dev-${email}`;
+    const sub = options.sub ?? generateDevSub();
     return new SignJWT({
         email,
         sub,

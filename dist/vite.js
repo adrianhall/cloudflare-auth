@@ -89,9 +89,9 @@ export function cloudflareAccessPlugin(options = {}) {
  */
 export function createAccessDevMiddleware(options = {}) {
     const policies = options.policies;
-    const devSecret = options.devSecret ?? DEFAULT_DEV_SECRET;
-    const users = options.users ?? [];
-    const loginPath = options.loginPath ?? DEFAULT_LOGIN_PATH;
+    const devSecret = valueOrDefault(options.devSecret, DEFAULT_DEV_SECRET);
+    const users = valueOrDefault(options.users, []);
+    const loginPath = valueOrDefault(options.loginPath, DEFAULT_LOGIN_PATH);
     const tokenLifetime = options.tokenLifetime;
     return (req, res, next) => {
         void handle(req, res, next).catch((err) => next(err));
@@ -158,7 +158,10 @@ export function createAccessDevMiddleware(options = {}) {
             sendHtml(res, 400, renderViteLoginPage(loginPath, redirect, users, "A valid email address is required."));
             return;
         }
-        const token = await signDevJwt(email, { secret: devSecret, lifetime: tokenLifetime });
+        // Pin the subject for a configured identity (stable, realistic sub);
+        // free-text / unknown emails fall back to a generated UUID.
+        const sub = users.find((u) => u.email === email)?.sub;
+        const token = await signDevJwt(email, { secret: devSecret, lifetime: tokenLifetime, sub });
         res.setHeader("Set-Cookie", buildCookieHeader(token, isSecure(req)));
         redirectTo(res, redirect);
     }
@@ -221,12 +224,13 @@ function buildIdentity(email, sub, name) {
 // Request helpers
 // ---------------------------------------------------------------------------
 function getPathname(req) {
-    const raw = req.url ?? "/";
+    const raw = valueOrDefault(req.url, "/");
     const queryIndex = raw.indexOf("?");
     return queryIndex === -1 ? raw : raw.slice(0, queryIndex);
 }
 function getQueryParam(req, key) {
-    const url = new URL(req.url ?? "/", "http://localhost");
+    const path = valueOrDefault(req.url, "/");
+    const url = new URL(path, "http://localhost");
     return url.searchParams.get(key) ?? undefined;
 }
 function isViteInternal(pathname) {
@@ -245,7 +249,7 @@ function isNavigation(req) {
         return fetchMode === "navigate";
     }
     const accept = headerValue(req, "accept");
-    return accept ? accept.includes("text/html") : false;
+    return valueOrDefault(accept?.includes("text/html"), false);
 }
 function isSecure(req) {
     // The Vite dev server runs over plain HTTP on localhost; treat HTTPS
@@ -296,5 +300,14 @@ function redirectTo(res, location) {
 }
 function redirectToLogin(res, loginPath, pathname) {
     redirectTo(res, `${loginPath}?redirect=${encodeURIComponent(pathname)}`);
+}
+/**
+ * Returns a `value` or the default value if not set
+ * @param value the source value
+ * @param defaultValue the default value
+ * @returns the `value` or default value if `value` is not set
+ */
+export function valueOrDefault(value, defaultValue) {
+    return value ?? defaultValue;
 }
 //# sourceMappingURL=vite.js.map
